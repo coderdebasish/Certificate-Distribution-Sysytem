@@ -1,0 +1,1492 @@
+# ========================================================================
+# CERTIFICATE DISTRIBUTION MANAGEMENT SYSTEM (CDMS)
+# USER INTERFACE & USER EXPERIENCE SPECIFICATION
+# VERSION 1.0
+# ========================================================================
+
+You are a Senior UI/UX Designer with extensive experience designing
+professional desktop software.
+
+Your responsibility is NOT to create a beautiful mockup.
+
+Your responsibility is to create a desktop interface that feels
+production-ready and suitable for daily use by event organizers.
+
+The interface should immediately communicate professionalism,
+simplicity and confidence.
+
+========================================================================
+DESIGN PHILOSOPHY
+========================================================================
+
+This application will often be used for projects containing
+
+100
+
+500
+
+1000
+
+sometimes even
+
+5000
+
+participants.
+
+Therefore,
+
+the UI should never feel cluttered.
+
+The application should always focus the user's attention
+on the current task.
+
+Avoid unnecessary decorations.
+
+Avoid large colorful banners.
+
+Avoid oversized icons.
+
+Avoid flashy animations.
+
+Every element should exist because it serves a purpose.
+
+========================================================================
+OVERALL APPEARANCE
+========================================================================
+
+Preferred Theme
+
+Dark Theme
+
+Default Accent
+
+Blue
+
+Alternative Accent Colors
+
+Purple
+
+Green
+
+Orange
+
+Gray
+
+Light Theme should also exist.
+
+The application should automatically remember
+the user's preferred theme.
+
+========================================================================
+STYLE INSPIRATION
+========================================================================
+
+The application should visually resemble
+
+Visual Studio Code
+
+Notion Desktop
+
+Microsoft Office 365
+
+Adobe Acrobat DC
+
+Postman
+
+Discord Desktop
+
+NOT
+
+Windows XP
+
+Old Java Applications
+
+Tkinter Demo Programs
+
+Student Projects
+
+========================================================================
+WINDOW DESIGN
+========================================================================
+
+Application Window
+
+Modern
+
+Resizable
+
+Rounded corners where supported
+
+Smooth resizing
+
+Minimum size
+
+1366 × 768
+
+Recommended default
+
+1600 × 900
+
+The interface should remain usable
+even after resizing.
+
+Never use fixed coordinates.
+
+Everything must use responsive layouts.
+
+========================================================================
+APPLICATION LAYOUT
+========================================================================
+
+The application consists of four major areas.
+
+──────────────────────────────────────────────
+
+Top Navigation Bar
+
+──────────────────────────────────────────────
+
+Left Navigation Sidebar
+
+Center Workspace
+
+Right Information Panel
+
+──────────────────────────────────────────────
+
+Bottom Status Bar
+
+──────────────────────────────────────────────
+
+This layout remains consistent
+throughout the application.
+
+Users should never feel lost.
+
+========================================================================
+TOP NAVIGATION BAR
+========================================================================
+
+The top bar should contain
+
+Application Logo
+
+Project Name
+
+Project Status
+
+Quick Save
+
+Undo
+
+Redo
+
+Search
+
+Settings
+
+Notifications
+
+User Menu
+
+Window Controls
+
+Everything should fit naturally.
+
+No overcrowding.
+
+========================================================================
+PROJECT STATUS
+========================================================================
+
+The top bar should always display
+
+Project Name
+
+Current Module
+
+Auto Save Status
+
+Example
+
+Future X Design Challenge
+
+Rename Certificates
+
+Saved Just Now
+
+If auto-saving
+
+display
+
+Saving...
+
+with a subtle animation.
+
+========================================================================
+GLOBAL SEARCH
+========================================================================
+
+A search box should always exist.
+
+The user can search
+
+Participant
+
+Certificate
+
+Project
+
+Log
+
+Template
+
+History
+
+Reports
+
+Search should be instant.
+
+No Enter key required.
+
+========================================================================
+LEFT SIDEBAR
+========================================================================
+
+The left sidebar is permanent.
+
+It is the primary navigation.
+
+Sections
+
+Dashboard
+
+Rename Certificates
+
+Participants
+
+Certificate Matching
+
+Email Templates
+
+Send Certificates
+
+Reports
+
+History
+
+Settings
+
+Help
+
+Only one module should appear active.
+
+The active module should be highlighted.
+
+========================================================================
+SIDEBAR BEHAVIOR
+========================================================================
+
+Sidebar supports
+
+Expanded
+
+Collapsed
+
+When collapsed
+
+only icons remain.
+
+Hovering displays tooltips.
+
+The user's preference should be remembered.
+
+========================================================================
+MODULE HEADER
+========================================================================
+
+Every module begins with a header.
+
+Example
+
+Rename Certificates
+
+Below it
+
+Short explanation
+
+Example
+
+Analyze certificates and rename them automatically.
+
+The user should immediately understand
+the module's purpose.
+
+========================================================================
+CENTER WORKSPACE
+========================================================================
+
+The center workspace is where
+most interaction happens.
+
+This area changes
+depending on the selected module.
+
+Examples
+
+Table
+
+PDF Preview
+
+Editor
+
+Dashboard
+
+Progress
+
+Never place unrelated information here.
+
+========================================================================
+RIGHT INFORMATION PANEL
+========================================================================
+
+The right panel displays context-sensitive information.
+
+Examples
+
+Selected Participant
+
+Selected Certificate
+
+Selected Email
+
+Statistics
+
+Properties
+
+Preview
+
+This panel updates automatically.
+
+If nothing is selected
+
+display
+
+"No item selected"
+
+instead of empty space.
+
+========================================================================
+BOTTOM STATUS BAR
+========================================================================
+
+Always visible.
+
+Displays
+
+Ready
+
+Project Saved
+
+Database Connected
+
+Internet Status
+
+Emails Remaining
+
+Background Tasks
+
+Current Time
+
+The status bar should never be decorative.
+
+Every item should provide useful information.
+
+========================================================================
+SPACING
+========================================================================
+
+The interface should feel breathable.
+
+Avoid cramped layouts.
+
+Margins
+
+16–24 pixels
+
+Padding
+
+12–20 pixels
+
+Table spacing
+
+Comfortable
+
+Buttons should never touch each other.
+
+========================================================================
+TYPOGRAPHY
+========================================================================
+
+Use modern fonts.
+
+Preferred
+
+Segoe UI
+
+Inter
+
+Roboto
+
+Noto Sans
+
+Different hierarchy
+
+Page Title
+
+Large
+
+Section Title
+
+Medium
+
+Labels
+
+Normal
+
+Descriptions
+
+Smaller
+
+Never overuse bold text.
+
+========================================================================
+BUTTON DESIGN
+========================================================================
+
+Primary Button
+
+Filled Accent Color
+
+Examples
+
+Analyze
+
+Rename
+
+Send
+
+Save
+
+Secondary Button
+
+Outline
+
+Examples
+
+Cancel
+
+Back
+
+Close
+
+Danger Button
+
+Red
+
+Delete
+
+Stop Sending
+
+Never use red
+for ordinary actions.
+
+========================================================================
+BUTTON STATES
+========================================================================
+
+Every button supports
+
+Normal
+
+Hover
+
+Pressed
+
+Disabled
+
+Loading
+
+Disabled buttons should clearly explain
+why they are disabled.
+
+Example
+
+Send
+
+Disabled
+
+Tooltip
+
+Resolve 2 missing certificates first.
+
+========================================================================
+ICONS
+========================================================================
+
+Every major module should have an icon.
+
+Dashboard
+
+Home
+
+Rename
+
+File Edit
+
+Participants
+
+Users
+
+Matching
+
+Link
+
+Templates
+
+Document
+
+Send
+
+Mail
+
+Reports
+
+Chart
+
+History
+
+Clock
+
+Settings
+
+Gear
+
+Icons should come from
+a consistent icon pack.
+
+Never mix icon styles.
+
+========================================================================
+COLOR SYSTEM
+========================================================================
+
+Colors communicate meaning.
+
+Blue
+
+Information
+
+Green
+
+Success
+
+Orange
+
+Warning
+
+Red
+
+Error
+
+Gray
+
+Disabled
+
+Never rely only on color.
+
+Also use icons
+and labels.
+
+========================================================================
+END OF UI MASTER PROMPT PART 1
+
+Continue directly with
+Dashboard Design,
+Project Cards,
+Tables,
+Dialogs,
+Forms,
+Progress Screens,
+PDF Preview,
+Animations,
+Notifications,
+and Accessibility
+without repeating anything.
+========================================================================
+DASHBOARD DESIGN
+========================================================================
+
+The Dashboard is the first screen displayed after launching the application.
+
+This screen determines the user's first impression.
+
+The Dashboard should feel welcoming, informative and professional.
+
+It should never feel empty.
+
+It should immediately tell the organizer
+
+• which project they are working on
+
+• what remains to be done
+
+• what was done recently
+
+• where they should continue.
+
+========================================================================
+LAYOUT
+========================================================================
+
+The dashboard consists of several cards.
+
+Top Row
+
+Welcome Card
+
+Project Statistics
+
+Quick Actions
+
+Second Row
+
+Recent Projects
+
+Current Project Progress
+
+Recent Activity
+
+Bottom Row
+
+Tips
+
+Software Updates
+
+Project Health
+
+The dashboard should automatically rearrange itself
+when the window is resized.
+
+========================================================================
+WELCOME CARD
+========================================================================
+
+Example
+
+Good Morning
+
+Debasish
+
+(or simply)
+
+Welcome Back
+
+Below it
+
+Current Project
+
+Future X Design Challenge
+
+Current Stage
+
+Email Template Ready
+
+Last Saved
+
+2 Minutes Ago
+
+========================================================================
+QUICK ACTIONS
+========================================================================
+
+Large buttons
+
+Create Project
+
+Open Project
+
+Resume Last Project
+
+Import Certificates
+
+Import Participants
+
+Resume Sending
+
+These buttons should remain visible
+without scrolling.
+
+========================================================================
+PROJECT STATISTICS
+========================================================================
+
+Display beautiful statistic cards.
+
+Example
+
+Participants
+
+524
+
+Certificates
+
+524
+
+Matched
+
+524
+
+Emails Sent
+
+318
+
+Remaining
+
+206
+
+Success Rate
+
+100%
+
+Cards should update live.
+
+========================================================================
+PROJECT PROGRESS
+========================================================================
+
+A horizontal progress timeline.
+
+Example
+
+✓ Project Created
+
+✓ Certificates Imported
+
+✓ Rename Completed
+
+✓ Participants Imported
+
+✓ Matching Completed
+
+○ Email Template
+
+○ Sending
+
+○ Reports
+
+Users instantly understand
+where they are.
+
+========================================================================
+RECENT PROJECTS
+========================================================================
+
+Each project appears as a card.
+
+Card contains
+
+Project Name
+
+Event
+
+Participants
+
+Certificates
+
+Status
+
+Last Opened
+
+Example
+
+Future X Design Challenge
+
+524 Participants
+
+Completed Matching
+
+Yesterday
+
+Double click
+
+↓
+
+Open Project
+
+========================================================================
+PROJECT STATUS COLORS
+========================================================================
+
+Draft
+
+Gray
+
+Ready
+
+Blue
+
+Sending
+
+Orange
+
+Completed
+
+Green
+
+Error
+
+Red
+
+========================================================================
+PROJECT HEALTH
+========================================================================
+
+Display warnings.
+
+Example
+
+Missing Certificates
+
+2
+
+Invalid Emails
+
+1
+
+Duplicate Names
+
+0
+
+Everything Ready
+
+Yes
+
+Never hide problems.
+
+========================================================================
+TABLE DESIGN
+========================================================================
+
+Tables are the most important component.
+
+Every module uses tables.
+
+The table should resemble
+
+Microsoft Excel
+
+or
+
+Notion Database
+
+Features
+
+Alternating row colors
+
+Resizable columns
+
+Sortable columns
+
+Instant search
+
+Multi-selection
+
+Context menu
+
+Keyboard navigation
+
+Sticky header
+
+Smooth scrolling
+
+========================================================================
+TABLE TOOLBAR
+========================================================================
+
+Above every table
+
+Search Box
+
+Filter
+
+Refresh
+
+Export
+
+Column Settings
+
+Row Count
+
+Example
+
+524 Rows
+
+Showing
+
+524
+
+========================================================================
+ROW COLORS
+========================================================================
+
+Rows communicate status.
+
+Green
+
+Success
+
+Orange
+
+Warning
+
+Red
+
+Failure
+
+Blue
+
+Selected
+
+Gray
+
+Disabled
+
+Never rely only on color.
+
+Use icons.
+
+========================================================================
+RIGHT CLICK MENU
+========================================================================
+
+Every table supports
+
+Copy
+
+Edit
+
+Delete
+
+Open
+
+View Details
+
+Export Selected
+
+Search Similar
+
+Manual Match
+
+depending on module.
+
+========================================================================
+FORMS
+========================================================================
+
+Forms should feel modern.
+
+Labels above fields.
+
+Not beside fields.
+
+Bad
+
+Name : _______
+
+Good
+
+Name
+
+__________
+
+This improves readability.
+
+========================================================================
+FIELD VALIDATION
+========================================================================
+
+Validation should happen live.
+
+Example
+
+Email
+
+abc@
+
+↓
+
+Red Border
+
+Invalid Email Address
+
+User should never discover errors
+after clicking Save.
+
+========================================================================
+SAVE BUTTON
+========================================================================
+
+Save button remains disabled
+until required fields become valid.
+
+Example
+
+Name
+
+✓
+
+Email
+
+✗
+
+Save
+
+Disabled
+
+Tooltip
+
+Please enter a valid email.
+
+========================================================================
+DIALOG BOXES
+========================================================================
+
+All dialogs should be consistent.
+
+Header
+
+Message
+
+Explanation
+
+Buttons
+
+Primary
+
+Secondary
+
+Danger
+
+Example
+
+Delete Participant
+
+Are you sure?
+
+This action can be undone.
+
+Cancel
+
+Delete
+
+========================================================================
+CONFIRMATION DIALOGS
+========================================================================
+
+Require confirmation for
+
+Delete
+
+Rename Commit
+
+Email Sending
+
+Project Reset
+
+Project Delete
+
+Overwrite
+
+Exit Without Saving
+
+========================================================================
+PROGRESS WINDOWS
+========================================================================
+
+Every long operation opens
+a progress window.
+
+Examples
+
+Scanning PDFs
+
+OCR
+
+Sending Emails
+
+Import Excel
+
+Generating Reports
+
+Display
+
+Progress Bar
+
+Percentage
+
+Current Item
+
+Remaining
+
+Elapsed
+
+Estimated Time
+
+Live Log
+
+Pause
+
+Cancel
+
+========================================================================
+PDF PREVIEW
+========================================================================
+
+PDF preview is extremely important.
+
+Features
+
+Zoom In
+
+Zoom Out
+
+Fit Width
+
+Fit Page
+
+Rotate
+
+Next Page
+
+Previous Page
+
+Page Number
+
+Mouse Wheel Zoom
+
+Drag To Pan
+
+Double Click Zoom
+
+High Quality Rendering
+
+The preview should remain smooth.
+
+========================================================================
+PDF INFORMATION PANEL
+========================================================================
+
+Alongside preview display
+
+Filename
+
+Pages
+
+Size
+
+Detected Name
+
+Confidence
+
+Extraction Method
+
+Status
+
+========================================================================
+EMAIL EDITOR
+========================================================================
+
+The email editor should resemble
+a simplified word processor.
+
+Toolbar
+
+Bold
+
+Italic
+
+Underline
+
+Lists
+
+Links
+
+Undo
+
+Redo
+
+Insert Placeholder
+
+Preview
+
+Split layout
+
+Editor on left
+
+Preview on right
+
+Live updates.
+
+========================================================================
+PLACEHOLDER HIGHLIGHTING
+========================================================================
+
+Placeholders should appear
+visually different.
+
+Example
+
+{name}
+
+Blue Tag
+
+{event_name}
+
+Purple Tag
+
+Invalid placeholders
+
+Red Underline
+
+========================================================================
+EMAIL PREVIEW
+========================================================================
+
+The preview should look exactly
+like the email the participant receives.
+
+Display
+
+From
+
+To
+
+Subject
+
+Body
+
+Attachment
+
+Allow switching participant
+without leaving preview.
+
+========================================================================
+NOTIFICATIONS
+========================================================================
+
+Use unobtrusive notifications.
+
+Bottom Right
+
+Examples
+
+Project Saved
+
+Participant Imported
+
+Email Sent
+
+Backup Completed
+
+Notifications disappear automatically.
+
+Errors remain until dismissed.
+
+========================================================================
+LOADING STATES
+========================================================================
+
+Never leave blank screens.
+
+Display
+
+Loading...
+
+Importing...
+
+Rendering...
+
+Preparing Queue...
+
+Every loading indicator should explain
+what is happening.
+
+========================================================================
+EMPTY STATES
+========================================================================
+
+Every empty screen should contain
+a helpful message.
+
+Example
+
+No Participants Found
+
+Import an Excel file
+or create participants manually.
+
+Include an action button.
+
+========================================================================
+ANIMATIONS
+========================================================================
+
+Animations should be subtle.
+
+Fade
+
+Slide
+
+Progress
+
+Hover
+
+Avoid excessive motion.
+
+Never reduce responsiveness.
+
+========================================================================
+KEYBOARD SHORTCUTS
+========================================================================
+
+Support common shortcuts.
+
+Ctrl + N
+
+New Project
+
+Ctrl + O
+
+Open
+
+Ctrl + S
+
+Save
+
+Ctrl + Shift + S
+
+Save As
+
+Ctrl + F
+
+Search
+
+Ctrl + Z
+
+Undo
+
+Ctrl + Y
+
+Redo
+
+Ctrl + A
+
+Select All
+
+Delete
+
+Delete Selected
+
+F5
+
+Refresh
+
+ESC
+
+Close Dialog
+
+========================================================================
+ACCESSIBILITY
+========================================================================
+
+Support
+
+High Contrast
+
+Keyboard Navigation
+
+Screen Reader Friendly Labels
+
+Large Fonts
+
+Color Blind Friendly Status Indicators
+
+Visible Keyboard Focus
+
+========================================================================
+WINDOW CLOSING
+========================================================================
+
+When closing the application
+
+If unsaved changes exist
+
+Display
+
+Save
+
+Don't Save
+
+Cancel
+
+Never silently discard work.
+
+========================================================================
+APPLICATION RESPONSIVENESS
+========================================================================
+
+The interface should remain responsive
+during every background task.
+
+Users should always be able to
+
+Move the window
+
+Resize
+
+Scroll
+
+Read logs
+
+Cancel operations
+
+Open help
+
+Background processing must never freeze
+the interface.
+
+========================================================================
+FINAL UI PRINCIPLE
+========================================================================
+
+The interface should make users feel
+
+"I always know what is happening."
+
+"I cannot accidentally make a mistake."
+
+"I trust this software."
+
+Every screen should reduce confusion.
+
+Every action should have feedback.
+
+Every error should have a recovery path.
+
+Every workflow should guide the user
+towards successful certificate distribution.
+
+========================================================================
+END OF COMPLETE UI/UX MASTER SPECIFICATION
+========================================================================

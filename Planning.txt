@@ -1,0 +1,4262 @@
+# ========================================================================
+# CERTIFICATE DISTRIBUTION MANAGEMENT SYSTEM (CDMS)
+# MASTER SOFTWARE SPECIFICATION
+# VERSION 1.0
+# ========================================================================
+
+You are a Senior Software Architect, Senior Python Desktop Application Developer, UI/UX Designer, Database Designer, QA Engineer, and DevOps Engineer.
+
+Your responsibility is to design and build a complete production-ready desktop application called:
+
+Certificate Distribution Management System (CDMS)
+
+This is NOT a prototype.
+This is NOT a college project.
+This is NOT a simple script.
+
+Treat this application as a commercial-quality desktop software that should be stable, scalable, modular, maintainable and visually polished.
+
+The final application should feel comparable to professional desktop applications such as Microsoft Office, Adobe Acrobat, Visual Studio, Notion Desktop, or Postman.
+
+Never sacrifice reliability for speed.
+
+Never make assumptions.
+
+Whenever uncertain, stop and ask.
+
+Every feature described below is mandatory unless explicitly marked as optional.
+
+========================================================================
+PRIMARY PURPOSE
+========================================================================
+
+The purpose of this software is to completely automate the certificate distribution workflow for events such as
+
+• Workshops
+• Hackathons
+• Ideathons
+• Seminars
+• Conferences
+• Webinars
+• College Events
+• School Events
+• Competitions
+• Training Programs
+• Internship Programs
+• Faculty Development Programs
+• Any event where digital certificates must be distributed
+
+Currently, organizers waste several hours doing repetitive manual work.
+
+Typical workflow today:
+
+Export Certificates
+↓
+
+Receive 500 PDFs named
+
+1.pdf
+2.pdf
+3.pdf
+...
+
+↓
+
+Rename every certificate manually
+
+↓
+
+Prepare Excel sheet
+
+↓
+
+Search certificate
+
+↓
+
+Attach certificate
+
+↓
+
+Write email
+
+↓
+
+Repeat hundreds of times
+
+↓
+
+Hope nothing goes wrong.
+
+This software completely eliminates that workflow.
+
+========================================================================
+MAIN OBJECTIVE
+========================================================================
+
+The application shall automate
+
+• Certificate Renaming
+• OCR
+• Participant Management
+• Certificate Matching
+• Email Preparation
+• Email Distribution
+• Progress Tracking
+• Project Saving
+• Recovery
+• Reports
+• Logs
+
+while keeping the organizer in complete control.
+
+The organizer must always know
+
+what the software is doing,
+
+why it is doing it,
+
+and what will happen next.
+
+========================================================================
+MOST IMPORTANT PRINCIPLE
+========================================================================
+
+THIS SOFTWARE MUST NEVER SEND AN INCORRECT CERTIFICATE TO A PARTICIPANT.
+
+This is the highest priority.
+
+Speed is secondary.
+
+Automation is secondary.
+
+Convenience is secondary.
+
+Accuracy is absolute.
+
+If anything appears suspicious,
+
+STOP.
+
+Notify the user.
+
+Allow manual correction.
+
+Never silently continue.
+
+========================================================================
+APPLICATION TYPE
+========================================================================
+
+Desktop Application
+
+Operating System
+
+Windows
+
+Programming Language
+
+Python
+
+GUI Framework
+
+CustomTkinter
+
+Reason
+
+Modern UI
+
+Native appearance
+
+Excellent dark mode support
+
+Easy maintenance
+
+Responsive layouts
+
+========================================================================
+APPLICATION ARCHITECTURE
+========================================================================
+
+The application MUST NOT be written as one huge Python file.
+
+Instead it shall follow a modular architecture.
+
+Each module must have exactly one responsibility.
+
+UI code must never contain business logic.
+
+Business logic must never directly manipulate widgets.
+
+Database operations must be isolated.
+
+Email operations must be isolated.
+
+OCR operations must be isolated.
+
+File operations must be isolated.
+
+The architecture must allow replacing one module without affecting others.
+
+========================================================================
+PROJECT PHILOSOPHY
+========================================================================
+
+The application revolves around PROJECTS.
+
+Everything belongs to a project.
+
+Every event is a separate project.
+
+Examples
+
+Future X Design Challenge
+
+Hackathon 2027
+
+AI Workshop
+
+IEEE Seminar
+
+Ideathon
+
+Each project stores its own
+
+participants
+
+settings
+
+logs
+
+templates
+
+certificates
+
+history
+
+reports
+
+Nothing from one event should interfere with another event.
+
+========================================================================
+PROJECT LIFECYCLE
+========================================================================
+
+Every project follows exactly the same workflow.
+
+Create Project
+
+↓
+
+Import Certificates
+
+↓
+
+Rename Certificates
+
+↓
+
+Verify Results
+
+↓
+
+Import Participants
+
+↓
+
+Match Certificates
+
+↓
+
+Review Matches
+
+↓
+
+Prepare Email
+
+↓
+
+Preview Emails
+
+↓
+
+Configure Sender
+
+↓
+
+Send Certificates
+
+↓
+
+Generate Report
+
+↓
+
+Archive Project
+
+No shortcuts should bypass important verification steps.
+
+========================================================================
+USER EXPERIENCE GOALS
+========================================================================
+
+The application should be usable by someone with zero programming knowledge.
+
+Every screen should clearly explain
+
+what it does,
+
+what is happening,
+
+and what the next step is.
+
+The application should never overwhelm the user.
+
+Complex operations should be broken into logical steps.
+
+Every long-running task must display
+
+progress bar
+
+percentage
+
+current file
+
+estimated remaining time
+
+success count
+
+failure count
+
+live logs
+
+Every destructive operation must ask for confirmation.
+
+========================================================================
+VISUAL DESIGN
+========================================================================
+
+The interface should be modern.
+
+Minimal.
+
+Professional.
+
+Consistent.
+
+No clutter.
+
+Preferred theme
+
+Dark Mode
+
+with optional Light Mode.
+
+Rounded corners.
+
+Proper spacing.
+
+Readable typography.
+
+Professional icons.
+
+Smooth animations where appropriate.
+
+The software should feel premium.
+
+========================================================================
+HOME SCREEN
+========================================================================
+
+When the software starts,
+
+the user should never land directly inside a module.
+
+Instead,
+
+they arrive at a dashboard.
+
+The dashboard contains
+
+Recent Projects
+
+Create New Project
+
+Open Existing Project
+
+Recent Activity
+
+Application Version
+
+Quick Statistics
+
+Example
+
+Projects
+
+------------------------------------
+
+Future X Design Challenge
+
+524 Participants
+
+524 Certificates
+
+Project Saved
+
+------------------------------------
+
+AI Workshop
+
+212 Participants
+
+Completed
+
+------------------------------------
+
+IEEE Seminar
+
+Draft
+
+------------------------------------
+
++ New Project
+
+========================================================================
+NEW PROJECT
+========================================================================
+
+Creating a project should ask only for essential information.
+
+Project Name
+
+Event Name
+
+Project Location
+
+Optional Description
+
+Nothing else.
+
+The application automatically creates
+
+Project Folder
+
+Database
+
+Logs
+
+Settings
+
+Cache
+
+Reports
+
+Templates
+
+Everything required internally.
+
+========================================================================
+PROJECT STORAGE
+========================================================================
+
+Every project should exist inside its own folder.
+
+Example
+
+Projects/
+
+Future X Design Challenge/
+
+Inside this folder
+
+project.cds
+
+database.db
+
+Participants/
+
+Certificates/
+
+Renamed Certificates/
+
+Reports/
+
+Logs/
+
+Templates/
+
+Cache/
+
+Settings/
+
+Backups/
+
+The software must automatically maintain these folders.
+
+The user should never need to manually create them.
+
+========================================================================
+PROJECT FILE
+========================================================================
+
+The .cds file stores the complete project state.
+
+This includes
+
+project information
+
+participant information
+
+certificate mappings
+
+email templates
+
+subject
+
+body
+
+manual corrections
+
+email settings
+
+sending status
+
+history
+
+logs
+
+reports
+
+current workflow stage
+
+window preferences
+
+everything required to reopen the project exactly where it was left.
+
+Closing and reopening the project should restore the software exactly to its previous state.
+
+Nothing should be lost.
+
+========================================================================
+AUTO SAVE
+========================================================================
+
+The application shall automatically save the project.
+
+The interval should be configurable.
+
+Default
+
+Every two minutes.
+
+The software should also automatically save
+
+before sending emails
+
+before closing
+
+after major operations
+
+after manual corrections
+
+after certificate matching
+
+after renaming
+
+after import
+
+after export
+
+No important work should ever be lost.
+
+========================================================================
+CRASH RECOVERY
+========================================================================
+
+If Windows crashes,
+
+or electricity fails,
+
+or Python unexpectedly terminates,
+
+the software should detect the incomplete shutdown.
+
+Next launch,
+
+display
+
+Recovered Project Found
+
+Project Name
+
+Last Saved
+
+Time
+
+Would you like to recover?
+
+Recover
+
+Discard
+
+Nothing should be permanently lost because of an unexpected shutdown.
+
+========================================================================
+========================================================================
+RENAME CERTIFICATES MODULE
+========================================================================
+
+The Rename Certificates module is the first major operational module of the software.
+
+Its responsibility is ONLY to identify participant names from certificate PDFs and generate properly renamed copies.
+
+This module MUST NEVER
+
+• send emails
+• read participant Excel files
+• perform participant matching
+• modify project templates
+• access Gmail
+• make assumptions based on participant data
+
+Its only responsibility is
+
+Input PDF
+↓
+
+Extract Name
+↓
+
+Verify
+↓
+
+Rename
+↓
+
+Copy
+
+Nothing more.
+
+========================================================================
+PURPOSE
+========================================================================
+
+Most certificate generators export files with meaningless names.
+
+Examples
+
+1.pdf
+2.pdf
+3.pdf
+...
+500.pdf
+
+Searching these files manually later becomes extremely time consuming.
+
+The Rename Certificates module solves this problem by converting
+
+1.pdf
+
+into
+
+Debasish Mohanty.pdf
+
+using information extracted directly from the certificate.
+
+========================================================================
+INPUT
+========================================================================
+
+The user selects
+
+Import Certificates
+
+The application opens a folder picker.
+
+The user selects the folder containing certificate PDFs.
+
+The software recursively scans ONLY PDF files unless recursive scanning is disabled in settings.
+
+Ignore
+
+.docx
+
+.xlsx
+
+.jpg
+
+.png
+
+.tmp
+
+hidden files
+
+system files
+
+========================================================================
+INITIAL VALIDATION
+========================================================================
+
+Before scanning,
+
+perform validation.
+
+Check
+
+Folder Exists
+
+Folder Readable
+
+Contains PDFs
+
+Not Empty
+
+Project Has Permission
+
+Enough Disk Space
+
+If validation fails,
+
+display a friendly explanation.
+
+Never crash.
+
+========================================================================
+AFTER IMPORT
+========================================================================
+
+Immediately display
+
+Certificates Found
+
+Example
+
+524 PDF Files Found
+
+Original Folder
+
+D:\Certificates\Export
+
+Status
+
+Ready for Analysis
+
+The user then clicks
+
+Analyze Certificates
+
+Scanning should NEVER begin automatically.
+
+========================================================================
+ANALYSIS ENGINE
+========================================================================
+
+The application now begins reading certificates.
+
+The analysis engine consists of multiple stages.
+
+Stage 1
+
+Attempt text extraction.
+
+Preferred libraries
+
+PyMuPDF
+
+Fallback
+
+pdfplumber
+
+If selectable text exists,
+
+OCR should NOT be executed.
+
+OCR is slower.
+
+Only use OCR if text extraction fails.
+
+========================================================================
+STAGE 2
+========================================================================
+
+If no readable text exists,
+
+attempt OCR.
+
+Preferred OCR
+
+PaddleOCR
+
+Reason
+
+Offline
+
+Fast
+
+High Accuracy
+
+Supports English names well.
+
+Future architecture should allow replacing PaddleOCR with another OCR engine.
+
+The OCR engine must be isolated behind an interface.
+
+Never tightly couple OCR logic with UI.
+
+========================================================================
+TEXT EXTRACTION
+========================================================================
+
+The software should extract all readable text.
+
+Not just the name.
+
+Later,
+
+the Name Detection Engine determines which portion is the participant name.
+
+Example
+
+Certificate of Participation
+
+This Certificate is Proudly Presented To
+
+Debasish Mohanty
+
+For Successfully Participating In
+
+Future X Design Challenge
+
+Only
+
+Debasish Mohanty
+
+is considered the detected participant name.
+
+========================================================================
+NAME DETECTION ENGINE
+========================================================================
+
+The application shall intelligently determine the participant name.
+
+The algorithm should use multiple strategies.
+
+Examples
+
+Keywords
+
+Presented To
+
+Awarded To
+
+This Certificate Is Presented To
+
+This Certificate Is Proudly Presented To
+
+Participant
+
+Recipient
+
+Winner
+
+After locating these keywords,
+
+search nearby text.
+
+If keyword strategy fails,
+
+attempt layout analysis.
+
+If multiple possible names exist,
+
+select the most probable one.
+
+Confidence scoring should be calculated.
+
+Never blindly choose the first text line.
+
+========================================================================
+CONFIDENCE SCORE
+========================================================================
+
+Each detected name receives a confidence score.
+
+Example
+
+99%
+
+95%
+
+82%
+
+60%
+
+Low confidence entries should be highlighted.
+
+Suggested thresholds
+
+90+
+
+Green
+
+70-89
+
+Orange
+
+Below 70
+
+Red
+
+Users should immediately know which certificates require manual verification.
+
+========================================================================
+LIVE PROCESSING
+========================================================================
+
+While scanning,
+
+display real-time progress.
+
+The user should never wonder whether the application has frozen.
+
+Display
+
+Current File
+
+Current Stage
+
+Reading PDF
+
+Extracting Text
+
+Running OCR
+
+Detecting Name
+
+Finished
+
+Display
+
+Current Certificate
+
+Elapsed Time
+
+Remaining Time
+
+Files Completed
+
+Files Remaining
+
+Success Count
+
+Failure Count
+
+========================================================================
+BACKGROUND PROCESSING
+========================================================================
+
+Scanning hundreds of certificates may take several minutes.
+
+The GUI must NEVER freeze.
+
+Use worker threads.
+
+UI updates must occur safely.
+
+Users should still be able to
+
+move the window
+
+scroll logs
+
+cancel scanning
+
+pause scanning
+
+========================================================================
+LIVE LOG
+========================================================================
+
+Every action should appear inside the log.
+
+Example
+
+Reading 001.pdf
+
+Text Extraction Successful
+
+Detected Name
+
+Debasish Mohanty
+
+Confidence
+
+98%
+
+Waiting
+
+Reading 002.pdf
+
+OCR Started
+
+OCR Completed
+
+Detected Name
+
+Rahul Das
+
+Confidence
+
+91%
+
+Reading 003.pdf
+
+No Name Detected
+
+Marked For Manual Review
+
+========================================================================
+RESULT TABLE
+========================================================================
+
+Every analyzed certificate appears inside a table.
+
+Columns
+
+Original File
+
+Detected Name
+
+Confidence
+
+Method Used
+
+Status
+
+New Filename
+
+Example
+
+1.pdf
+
+Debasish Mohanty
+
+98%
+
+Text
+
+Ready
+
+Debasish Mohanty.pdf
+
+2.pdf
+
+Rahul Das
+
+93%
+
+OCR
+
+Ready
+
+Rahul Das.pdf
+
+3.pdf
+
+Unknown
+
+0%
+
+Failed
+
+Manual Review Required
+
+---
+
+Rows should support sorting.
+
+Filtering.
+
+Searching.
+
+========================================================================
+SEARCH
+========================================================================
+
+Instant search.
+
+Search by
+
+Original Filename
+
+Detected Name
+
+Status
+
+Confidence
+
+Example
+
+Typing
+
+Rah
+
+Immediately filters
+
+Rahul
+
+Rahman
+
+Rahat
+
+without pressing Enter.
+
+========================================================================
+FILTERS
+========================================================================
+
+Provide quick filters.
+
+All
+
+Ready
+
+Needs Review
+
+Failed
+
+OCR
+
+Text Extraction
+
+Duplicates
+
+Low Confidence
+
+========================================================================
+DRY RUN
+========================================================================
+
+The application MUST NEVER rename immediately after analysis.
+
+Instead,
+
+the software enters Dry Run mode.
+
+Dry Run means
+
+NO files are modified.
+
+NO files are renamed.
+
+NO files are copied.
+
+NO originals are touched.
+
+Only predictions are displayed.
+
+The purpose is allowing the organizer to verify everything before committing.
+
+This feature is mandatory.
+
+========================================================================
+MANUAL EDITING
+========================================================================
+
+Users should be allowed to edit detected names.
+
+Double click
+
+Detected Name
+
+Type correct name
+
+Save
+
+Confidence becomes
+
+Manual
+
+instead of OCR.
+
+The application records
+
+Original OCR Result
+
+Manual Change
+
+Timestamp
+
+User Action
+
+========================================================================
+DUPLICATE DETECTION
+========================================================================
+
+Before renaming,
+
+check duplicate filenames.
+
+Example
+
+Debasish Mohanty.pdf
+
+already exists.
+
+Possible reasons
+
+Duplicate participant
+
+OCR mistake
+
+Two certificates with same detected name
+
+The software MUST stop.
+
+Display
+
+Duplicate Found
+
+Allow user to
+
+Rename manually
+
+Skip
+
+Overwrite
+
+Create numbered filename
+
+The default action must NEVER overwrite.
+
+========================================================================
+INVALID FILE NAME CHECK
+========================================================================
+
+Windows filename restrictions must be enforced.
+
+Remove or replace
+
+/
+
+\
+
+:
+
+*
+
+?
+
+"
+
+<
+
+>
+
+|
+
+Trailing spaces
+
+Reserved names
+
+Leading dots
+
+Multiple spaces
+
+Normalize Unicode where appropriate.
+
+========================================================================
+MANUAL REVIEW PANEL
+========================================================================
+
+Selecting a certificate opens a preview.
+
+Left Side
+
+Original PDF
+
+Zoom
+
+Rotate
+
+Page Navigation
+
+Right Side
+
+Detected Name
+
+Confidence
+
+Extraction Method
+
+Extracted Text
+
+Editable Name
+
+Buttons
+
+Save
+
+Previous
+
+Next
+
+Mark As Ignore
+
+Retry OCR
+
+This allows correcting problematic certificates without leaving the module.
+
+========================================================================
+PREVIEW WINDOW
+========================================================================
+
+PDF preview should be smooth.
+
+Support
+
+Zoom
+
+Fit Width
+
+Fit Height
+
+Mouse Wheel Zoom
+
+Drag
+
+Page Navigation
+
+High DPI rendering
+
+Users should clearly see the participant name.
+
+========================================================================
+IGNORE FEATURE
+========================================================================
+
+Sometimes folders contain
+
+Instructions
+
+Cover Page
+
+Index
+
+Blank PDFs
+
+These should not become certificates.
+
+Allow
+
+Mark As Ignore
+
+Ignored files
+
+are excluded from renaming.
+
+========================================================================
+RETRY ANALYSIS
+========================================================================
+
+Users should be able to retry only selected certificates.
+
+Not the entire folder.
+
+Retry options
+
+Text Extraction
+
+OCR
+
+Both
+
+========================================================================
+COMMIT RENAMING
+========================================================================
+
+Only after user confirmation,
+
+begin renaming.
+
+The software shall NEVER rename originals.
+
+Instead
+
+Original Folder
+
+remains untouched.
+
+A new folder
+
+Renamed Certificates
+
+is created inside the project.
+
+Every renamed certificate is copied there.
+
+Original
+
+1.pdf
+
+Destination
+
+Renamed Certificates/
+
+Debasish Mohanty.pdf
+
+Original remains unchanged.
+
+This guarantees reversibility.
+
+========================================================================
+PROGRESS DURING RENAMING
+========================================================================
+
+Display
+
+Copying
+
+Renaming
+
+Completed
+
+Failed
+
+Progress Bar
+
+Remaining
+
+Elapsed Time
+
+========================================================================
+RENAME LOG
+========================================================================
+
+Generate a rename log.
+
+Each entry contains
+
+Timestamp
+
+Original Name
+
+New Name
+
+Method
+
+Confidence
+
+Manual Edited
+
+Success
+
+Failure Reason
+
+Store permanently inside project history.
+
+========================================================================
+FINAL SUMMARY
+========================================================================
+
+After completion display
+
+Certificates Scanned
+
+Certificates Renamed
+
+Manual Corrections
+
+OCR Used
+
+Text Extraction Used
+
+Duplicates
+
+Ignored Files
+
+Failures
+
+Time Taken
+
+The user may now proceed to the next module.
+
+========================================================================
+STRICT BOUNDARY
+========================================================================
+
+The Rename Certificates module SHALL NOT
+
+Import Participants
+
+Read Excel
+
+Access Email Templates
+
+Send Emails
+
+Match Participants
+
+Open Gmail
+
+It simply produces a folder of correctly renamed certificates for later modules.
+
+========================================================================
+========================================================================
+PARTICIPANT MANAGEMENT MODULE
+========================================================================
+
+The Participant Management module is responsible for creating and maintaining
+the master participant database for the current project.
+
+This module DOES NOT
+
+• rename certificates
+• perform OCR
+• send emails
+• access Gmail
+• rename PDF files
+
+Its only responsibility is managing participant information.
+
+========================================================================
+PURPOSE
+========================================================================
+
+The application needs a reliable database of recipients.
+
+Every participant record represents ONE PERSON.
+
+This database becomes the single source of truth throughout the project.
+
+Every later module depends on this data.
+
+Therefore accuracy is extremely important.
+
+========================================================================
+SUPPORTED INPUT METHODS
+========================================================================
+
+The software shall support two methods.
+
+Method 1
+
+Manual Entry
+
+Method 2
+
+Excel Import
+
+Future versions may include
+
+CSV
+
+Google Sheets
+
+Database
+
+REST API
+
+These should be easy to add later.
+
+========================================================================
+MANUAL ENTRY
+========================================================================
+
+The organizer may manually create participants.
+
+The form should contain
+
+Name *
+
+Email *
+
+Phone (Optional)
+
+College (Optional)
+
+Department (Optional)
+
+Designation (Optional)
+
+Certificate Type (Optional)
+
+Remarks (Optional)
+
+Fields marked *
+
+are mandatory.
+
+========================================================================
+NAME VALIDATION
+========================================================================
+
+The Name field must never be empty.
+
+Trim leading spaces.
+
+Trim trailing spaces.
+
+Collapse multiple spaces.
+
+Reject names consisting only of spaces.
+
+Do not automatically convert case.
+
+Preserve the original capitalization entered by the organizer.
+
+Example
+
+Debasish Mohanty
+
+must remain exactly as entered.
+
+========================================================================
+EMAIL VALIDATION
+========================================================================
+
+Validate email format before saving.
+
+Example
+
+Correct
+
+abc@gmail.com
+
+student@college.edu
+
+Incorrect
+
+abc
+
+gmail.com
+
+abc@
+
+If invalid
+
+highlight the field
+
+display explanation
+
+prevent saving.
+
+========================================================================
+DUPLICATE PARTICIPANT DETECTION
+========================================================================
+
+Before adding a participant
+
+check for duplicates.
+
+Duplicate detection should consider
+
+Name
+
+Email
+
+Combination of Name + Email
+
+If duplicate detected
+
+display warning
+
+Existing Participant Found
+
+Allow
+
+Cancel
+
+Merge
+
+Keep Both
+
+The software must never silently create duplicates.
+
+========================================================================
+EDIT PARTICIPANT
+========================================================================
+
+Every participant should be editable.
+
+Double click
+
+or
+
+Edit Button
+
+All changes should immediately update the project database.
+
+Every modification should be stored in history.
+
+========================================================================
+DELETE PARTICIPANT
+========================================================================
+
+Deleting participants should never happen instantly.
+
+Display confirmation.
+
+Example
+
+Delete Participant
+
+Debasish Mohanty
+
+Are you sure?
+
+Cancel
+
+Delete
+
+Deleted records should move to a recycle state.
+
+Permanent deletion should be optional.
+
+========================================================================
+BULK IMPORT
+========================================================================
+
+The most common workflow is importing Excel.
+
+The organizer selects
+
+Import Excel
+
+The application opens a file picker.
+
+Supported formats
+
+.xlsx
+
+.xls
+
+Future
+
+.csv
+
+========================================================================
+IMPORT WIZARD
+========================================================================
+
+Never assume column names.
+
+Instead
+
+display an import wizard.
+
+Step 1
+
+Read Excel
+
+Step 2
+
+Display first few rows
+
+Step 3
+
+Ask user to map columns.
+
+Example
+
+Excel Column
+
+Participant Name
+
+↓
+
+Software Field
+
+Name
+
+Excel Column
+
+Email Address
+
+↓
+
+Email
+
+Unknown columns may be ignored.
+
+========================================================================
+COLUMN MAPPING
+========================================================================
+
+Mappings should be remembered for future imports
+within the same project.
+
+Example
+
+Name
+
+↓
+
+Participant Name
+
+Email
+
+↓
+
+Email ID
+
+The user should not repeatedly map identical columns.
+
+========================================================================
+IMPORT VALIDATION
+========================================================================
+
+During import
+
+validate every row.
+
+Missing Name
+
+Invalid Email
+
+Duplicate Email
+
+Duplicate Name
+
+Empty Row
+
+Corrupted Data
+
+Rows containing errors should be highlighted.
+
+The organizer chooses
+
+Import Valid Rows
+
+or
+
+Cancel
+
+========================================================================
+IMPORT SUMMARY
+========================================================================
+
+After import display
+
+Total Rows
+
+Imported
+
+Skipped
+
+Duplicates
+
+Invalid Emails
+
+Warnings
+
+Allow export of validation report.
+
+========================================================================
+PARTICIPANT TABLE
+========================================================================
+
+Display every participant in a professional table.
+
+Columns
+
+Name
+
+Email
+
+Certificate
+
+Match Status
+
+Email Status
+
+Remarks
+
+Rows should support
+
+Sorting
+
+Filtering
+
+Searching
+
+Multi-selection
+
+Column resizing
+
+========================================================================
+SEARCH
+========================================================================
+
+Instant search.
+
+Typing
+
+Deb
+
+immediately filters
+
+Debasish
+
+Debjit
+
+Debabrata
+
+Typing
+
+gmail
+
+shows Gmail addresses only.
+
+========================================================================
+FILTERS
+========================================================================
+
+Provide quick filters.
+
+All
+
+Matched
+
+Unmatched
+
+Email Sent
+
+Pending
+
+Failed
+
+Manual Certificate
+
+Missing Certificate
+
+Duplicate
+
+========================================================================
+PARTICIPANT PROFILE
+========================================================================
+
+Selecting a participant opens a side panel.
+
+Display
+
+Full Name
+
+Email
+
+Assigned Certificate
+
+Match Method
+
+Email Status
+
+Date Imported
+
+History
+
+Notes
+
+Future versions may display
+delivery history.
+
+========================================================================
+IMPORT HISTORY
+========================================================================
+
+Every import operation should be recorded.
+
+Timestamp
+
+Imported File
+
+Rows
+
+Warnings
+
+Duplicates
+
+User
+
+This allows tracing mistakes later.
+
+========================================================================
+UNDO SUPPORT
+========================================================================
+
+Bulk imports should support Undo.
+
+If the organizer accidentally imports the wrong Excel file
+
+they should be able to revert the last import
+without affecting previous data.
+
+========================================================================
+CERTIFICATE STATUS
+========================================================================
+
+Initially
+
+every participant has
+
+Certificate Status
+
+Not Assigned
+
+The Participant Management module does NOT assign certificates.
+
+Assignment occurs in the next module.
+
+========================================================================
+DATA INTEGRITY
+========================================================================
+
+Each participant receives a permanent internal ID.
+
+Example
+
+PID000001
+
+PID000002
+
+These IDs should never change
+
+even if names are edited.
+
+Internal IDs prevent broken references
+throughout the application.
+
+========================================================================
+PROJECT SYNCHRONIZATION
+========================================================================
+
+Every modification immediately updates
+
+SQLite Database
+
+Project File
+
+Auto Save Queue
+
+History Log
+
+Crash Recovery Snapshot
+
+No user action should be lost.
+
+========================================================================
+STRICT MODULE BOUNDARY
+========================================================================
+
+This module SHALL NOT
+
+Rename PDFs
+
+Perform OCR
+
+Access Gmail
+
+Match Certificates Automatically
+
+Send Emails
+
+Modify Email Templates
+
+Those responsibilities belong to later modules.
+
+Its only responsibility is maintaining an accurate participant database.
+
+========================================================================
+CERTIFICATE MATCHING MODULE
+========================================================================
+
+The Certificate Matching module begins only after
+
+Participants exist
+
+AND
+
+Renamed Certificates exist.
+
+This module connects
+
+Participant
+
+↓
+
+Certificate
+
+Nothing else.
+
+It never renames certificates.
+
+It never edits participant names.
+
+It only establishes relationships.
+
+========================================================================
+INPUT
+========================================================================
+
+Input A
+
+Participant Database
+
+Input B
+
+Renamed Certificates Folder
+
+Both inputs must exist before matching begins.
+
+If either is missing
+
+disable the module
+
+and explain why.
+
+========================================================================
+MATCHING PROCESS
+========================================================================
+
+The software scans the
+
+Renamed Certificates
+
+folder.
+
+Example
+
+Debasish Mohanty.pdf
+
+Rahul Das.pdf
+
+Ananya Roy.pdf
+
+Every filename is compared against participant names.
+
+Matching should be intelligent.
+
+Ignore
+
+case differences
+
+extra spaces
+
+multiple spaces
+
+minor punctuation
+
+Unicode normalization
+
+Example
+
+Debasish Mohanty
+
+matches
+
+debasish   mohanty.pdf
+
+========================================================================
+MATCH CONFIDENCE
+========================================================================
+
+Each match receives
+
+Exact
+
+High
+
+Medium
+
+Low
+
+Manual
+
+Confidence should be visible.
+
+Low confidence matches require user review.
+
+========================================================================
+AUTO MATCH RESULTS
+========================================================================
+
+Display
+
+Participants
+
+Matched Certificates
+
+Missing Certificates
+
+Duplicate Certificates
+
+Unused Certificates
+
+This overview appears before allowing manual review.
+
+========================================================================
+MATCH TABLE
+========================================================================
+
+Columns
+
+Participant
+
+Email
+
+Assigned Certificate
+
+Match Method
+
+Confidence
+
+Email Status
+
+Actions
+
+Example
+
+Debasish Mohanty
+
+Debasish Mohanty.pdf
+
+Exact
+
+100%
+
+Pending
+
+Edit
+
+========================================================================
+MANUAL CERTIFICATE SELECTION
+========================================================================
+
+Every participant should allow manual reassignment.
+
+Instead of a dropdown
+
+provide
+
+Browse
+
+The organizer selects another PDF.
+
+This updates only that participant.
+
+========================================================================
+UNUSED CERTIFICATES
+========================================================================
+
+If certificates remain unmatched
+
+display them separately.
+
+Example
+
+Unknown Person.pdf
+
+Cover.pdf
+
+Old Certificate.pdf
+
+Allow
+
+Ignore
+
+Assign
+
+Delete From Project
+
+Never silently discard them.
+
+========================================================================
+MISSING CERTIFICATES
+========================================================================
+
+If participants have no certificate
+
+display
+
+Missing Certificate
+
+Highlight row in red.
+
+Sending emails must remain disabled
+until resolved.
+
+========================================================================
+DUPLICATE CERTIFICATE DETECTION
+========================================================================
+
+One certificate must never be assigned
+to two participants.
+
+If detected
+
+block progression.
+
+Display
+
+Certificate already assigned.
+
+Choose another certificate.
+========================================================================
+EMAIL TEMPLATE ENGINE
+========================================================================
+
+The Email Template Engine is responsible for preparing personalized emails
+for every participant.
+
+This module DOES NOT
+
+• send emails
+• communicate with Gmail
+• rename certificates
+• modify participant data
+
+Its responsibility is ONLY preparing email content.
+
+The actual sending is handled by the Email Sending Engine.
+
+========================================================================
+DESIGN PHILOSOPHY
+========================================================================
+
+The organizer should NEVER have to write 500 emails.
+
+Instead,
+
+the organizer writes ONE email.
+
+The software automatically generates
+one personalized version for every participant.
+
+Example
+
+Organizer writes
+
+Dear {name},
+
+Thank you for participating...
+
+The software automatically creates
+
+Dear Debasish Mohanty,
+
+for one participant
+
+and
+
+Dear Rahul Das,
+
+for another participant.
+
+Every email is generated independently.
+
+========================================================================
+EMAIL TEMPLATE
+========================================================================
+
+Each project may contain multiple templates.
+
+Examples
+
+Participation Certificate
+
+Winner Certificate
+
+Volunteer Certificate
+
+Speaker Certificate
+
+Judge Certificate
+
+Organizing Team
+
+Appreciation Certificate
+
+Internship Certificate
+
+The organizer may choose one template as the active template.
+
+========================================================================
+TEMPLATE INFORMATION
+========================================================================
+
+Every template stores
+
+Template Name
+
+Subject
+
+Email Body
+
+Default Attachment Type
+
+Creation Date
+
+Modified Date
+
+Version
+
+Description
+
+========================================================================
+PROJECT TEMPLATE STORAGE
+========================================================================
+
+Templates belong to the project.
+
+Example
+
+Future X/
+
+Templates/
+
+Participation.template
+
+Winner.template
+
+Volunteer.template
+
+Templates should automatically load
+when the project opens.
+
+========================================================================
+PLACEHOLDER ENGINE
+========================================================================
+
+The software shall support placeholders.
+
+Placeholders are replaced automatically.
+
+Example
+
+{name}
+
+↓
+
+Debasish Mohanty
+
+Supported placeholders
+
+{name}
+
+{email}
+
+{certificate}
+
+{event_name}
+
+{project_name}
+
+{college}
+
+{department}
+
+{designation}
+
+{date}
+
+{year}
+
+Future placeholders should be easy to add.
+
+========================================================================
+INSERT PLACEHOLDER TOOLBAR
+========================================================================
+
+Users should never need to remember placeholders.
+
+Provide
+
+Insert Variable
+
+Menu
+
+Click
+
+Name
+
+↓
+
+Automatically inserts
+
+{name}
+
+at cursor position.
+
+========================================================================
+EMAIL SUBJECT
+========================================================================
+
+Subject supports placeholders.
+
+Example
+
+Participation Certificate - {event_name}
+
+or
+
+Congratulations {name}
+
+Subject preview updates live.
+
+========================================================================
+EMAIL BODY EDITOR
+========================================================================
+
+Provide a professional editor.
+
+Support
+
+Bold
+
+Italic
+
+Underline
+
+Lists
+
+Alignment
+
+Hyperlinks
+
+Simple HTML formatting
+
+Undo
+
+Redo
+
+Find
+
+Replace
+
+Word Count
+
+Character Count
+
+The editor should feel modern.
+
+========================================================================
+LIVE PREVIEW
+========================================================================
+
+The organizer should always see
+what participants will receive.
+
+Display
+
+Subject
+
+Body
+
+Attachment
+
+Example participant
+
+The preview automatically updates
+as the template changes.
+
+========================================================================
+PARTICIPANT PREVIEW SWITCHER
+========================================================================
+
+Allow preview using different participants.
+
+Dropdown
+
+Debasish Mohanty
+
+Rahul Das
+
+Ananya Roy
+
+Switching participants immediately updates
+
+Subject
+
+Body
+
+Attachment
+
+This allows checking placeholder replacements.
+
+========================================================================
+PLACEHOLDER VALIDATION
+========================================================================
+
+Before saving
+
+validate placeholders.
+
+Unknown placeholders
+
+Example
+
+{student}
+
+if unsupported
+
+should produce warning.
+
+Do not silently ignore.
+
+========================================================================
+EMAIL TEMPLATE VERSION HISTORY
+========================================================================
+
+Every save creates a new version.
+
+Example
+
+Version 1
+
+Version 2
+
+Version 3
+
+Allow
+
+Restore Previous Version
+
+This prevents accidental template loss.
+
+========================================================================
+SAVE TEMPLATE
+========================================================================
+
+Templates should be saved independently.
+
+Example
+
+Participation Email
+
+can later be reused
+
+without rewriting.
+
+========================================================================
+DUPLICATE TEMPLATE
+========================================================================
+
+Allow
+
+Duplicate Template
+
+Useful when creating
+
+Winner
+
+Participation
+
+Volunteer
+
+templates from a common design.
+
+========================================================================
+DELETE TEMPLATE
+========================================================================
+
+Deleting templates requires confirmation.
+
+Never delete immediately.
+
+========================================================================
+EMAIL ATTACHMENTS
+========================================================================
+
+Normally
+
+one attachment exists.
+
+The participant's certificate.
+
+Future versions may allow
+
+additional PDFs
+
+brochures
+
+feedback forms
+
+event photos
+
+The architecture should support multiple attachments.
+
+========================================================================
+ATTACHMENT VALIDATION
+========================================================================
+
+Before sending
+
+verify
+
+certificate exists
+
+readable
+
+not corrupted
+
+correct participant assignment
+
+Never send missing attachments.
+
+========================================================================
+EMAIL PREVIEW REPORT
+========================================================================
+
+Before emails are sent
+
+generate a preview report.
+
+Participants
+
+524
+
+Certificates Attached
+
+524
+
+Missing Certificates
+
+0
+
+Invalid Emails
+
+0
+
+Ready
+
+Yes
+
+If any issue exists
+
+disable sending.
+
+========================================================================
+PRE-SEND VALIDATION
+========================================================================
+
+The Send button remains disabled until
+
+Every participant has
+
+valid email
+
+assigned certificate
+
+successful template rendering
+
+no duplicate attachment
+
+no missing attachment
+
+no invalid placeholders
+
+Only then
+
+Enable Send.
+
+========================================================================
+PROJECT SAVE BEHAVIOR
+========================================================================
+
+Everything created inside this module
+must automatically save into the project.
+
+Closing the application and reopening later
+must restore
+
+Subject
+
+Body
+
+Cursor Position
+
+Active Template
+
+Preview State
+
+Toolbar State
+
+Nothing should be lost.
+
+========================================================================
+EMAIL SENDING ENGINE
+========================================================================
+
+The Email Sending Engine is the most critical module.
+
+It communicates with Gmail.
+
+It is responsible for
+
+authentication
+
+queue
+
+sending
+
+retry
+
+pause
+
+resume
+
+logging
+
+recovery
+
+Nothing else.
+
+========================================================================
+EMAIL PROVIDER ARCHITECTURE
+========================================================================
+
+The sending engine must NOT directly depend on Gmail.
+
+Instead
+
+create an Email Provider Interface.
+
+Example
+
+EmailProvider
+
+↓
+
+Gmail Provider
+
+↓
+
+Future
+
+Outlook Provider
+
+Resend Provider
+
+SendGrid Provider
+
+Amazon SES Provider
+
+Switching providers should require
+minimal code changes.
+
+========================================================================
+VERSION 1 PROVIDER
+========================================================================
+
+Only Gmail is implemented initially.
+
+Authentication uses
+
+Email Address
+
+Google App Password
+
+Never request the user's Google password.
+
+Never store passwords in plain text.
+
+Encrypt locally.
+
+========================================================================
+TEST CONNECTION
+========================================================================
+
+Before saving credentials
+
+allow
+
+Test Connection
+
+Display
+
+Connected
+
+or
+
+Authentication Failed
+
+Explain failures clearly.
+
+========================================================================
+EMAIL QUEUE
+========================================================================
+
+Never send emails directly from the table.
+
+Instead
+
+generate a sending queue.
+
+Queue Item
+
+Participant
+
+↓
+
+Certificate
+
+↓
+
+Rendered Subject
+
+↓
+
+Rendered Body
+
+↓
+
+Attachment
+
+↓
+
+Ready
+
+Only after queue generation
+
+begin sending.
+
+========================================================================
+QUEUE VALIDATION
+========================================================================
+
+Every queue item is validated again.
+
+Email
+
+Certificate
+
+Attachment
+
+Template
+
+Provider
+
+Any failure prevents sending.
+
+========================================================================
+SEND CONFIRMATION
+========================================================================
+
+Before the first email
+
+display
+
+Project
+
+Participants
+
+Emails To Send
+
+Estimated Time
+
+Delay
+
+Provider
+
+From Address
+
+Template
+
+Ask
+
+Start Sending
+
+Cancel
+
+========================================================================
+SENDING WINDOW
+========================================================================
+
+Display
+
+Progress Bar
+
+Current Participant
+
+Current Email
+
+Current Certificate
+
+Elapsed Time
+
+Estimated Remaining
+
+Success Count
+
+Failure Count
+
+Retry Count
+
+Current Speed
+
+========================================================================
+LIVE LOG
+========================================================================
+
+Every email appears in the log.
+
+Connecting
+
+Rendering
+
+Attaching Certificate
+
+Sending
+
+Delivered
+
+Failed
+
+Waiting
+
+Retrying
+
+Never hide operations.
+
+========================================================================
+DELAY SYSTEM
+========================================================================
+
+Support configurable delay.
+
+Default
+
+5 seconds
+
+Allow
+
+2
+
+5
+
+10
+
+30
+
+60
+
+Custom
+
+Delay occurs AFTER successful sending.
+
+========================================================================
+PROGRESS SAVE
+========================================================================
+
+After EVERY successful email
+
+immediately save
+
+project
+
+database
+
+history
+
+queue state
+
+Never wait until completion.
+
+This allows recovery after crashes.
+
+========================================================================
+PAUSE
+========================================================================
+
+Pause immediately after current email finishes.
+
+Do not interrupt SMTP transmission.
+
+Display
+
+Paused
+
+Current Position
+
+Remaining
+
+Resume
+
+========================================================================
+STOP
+========================================================================
+
+Stop means
+
+finish current email
+
+save progress
+
+terminate queue
+
+User may later resume.
+
+========================================================================
+CRASH RECOVERY
+========================================================================
+
+If the application closes unexpectedly
+
+recover
+
+Last Sent Email
+
+Remaining Queue
+
+Progress
+
+Retry Information
+
+Never resend already successful emails
+unless explicitly requested.
+
+========================================================================
+DUPLICATE EMAIL PREVENTION
+========================================================================
+
+Every participant has
+
+Email Status
+
+Pending
+
+Sent
+
+Failed
+
+Skipped
+
+Resuming a project
+must skip
+
+Sent
+
+unless user chooses
+
+Resend.
+
+========================================================================
+END OF PART 4
+
+CONTINUE DIRECTLY WITH REPORTS, HISTORY, LOGGING,
+SETTINGS, DATABASE DESIGN, THREADING, SECURITY,
+ERROR HANDLING, AND FUTURE EXTENSIBILITY.
+========================================================================
+REPORTS, HISTORY, LOGGING, SETTINGS, DATABASE DESIGN,
+THREADING, SECURITY, ERROR HANDLING AND FUTURE ARCHITECTURE
+========================================================================
+
+========================================================================
+REPORTING SYSTEM
+========================================================================
+
+The application shall generate professional reports after every major operation.
+
+Reports should never overwrite previous reports.
+
+Each report should include
+
+Project Name
+
+Event Name
+
+Date
+
+Time
+
+Software Version
+
+Generated By
+
+Project ID
+
+Every report should be exportable as
+
+PDF
+
+Excel
+
+CSV
+
+Text
+
+Future versions may support HTML.
+
+========================================================================
+AVAILABLE REPORTS
+========================================================================
+
+The software shall generate
+
+Rename Report
+
+Participant Report
+
+Certificate Matching Report
+
+Email Delivery Report
+
+Failure Report
+
+Duplicate Report
+
+Project Summary
+
+History Report
+
+Each report should be independently accessible.
+
+========================================================================
+RENAME REPORT
+========================================================================
+
+Contains
+
+Original Filename
+
+Detected Name
+
+Final Filename
+
+Extraction Method
+
+Confidence
+
+Manual Correction
+
+Timestamp
+
+Status
+
+Failure Reason
+
+This report allows organizers to verify how every certificate was renamed.
+
+========================================================================
+PARTICIPANT REPORT
+========================================================================
+
+Contains
+
+Participant Name
+
+Email
+
+Certificate Assigned
+
+Match Status
+
+Email Status
+
+Import Source
+
+Remarks
+
+========================================================================
+EMAIL DELIVERY REPORT
+========================================================================
+
+Contains
+
+Participant
+
+Email
+
+Certificate
+
+Sent Time
+
+Delivery Status
+
+Attempts
+
+Provider
+
+Error Message
+
+This report becomes the official proof
+of distribution.
+
+========================================================================
+FAILURE REPORT
+========================================================================
+
+Only contains failed operations.
+
+Examples
+
+Invalid Email
+
+Certificate Missing
+
+SMTP Failure
+
+Authentication Failure
+
+Network Error
+
+Template Error
+
+This allows quick correction.
+
+========================================================================
+PROJECT SUMMARY REPORT
+========================================================================
+
+Provide an overview.
+
+Example
+
+Project Name
+
+Future X Design Challenge
+
+Participants
+
+524
+
+Certificates
+
+524
+
+Emails Sent
+
+522
+
+Failed
+
+2
+
+Pending
+
+0
+
+Manual Corrections
+
+14
+
+Time Taken
+
+52 Minutes
+
+========================================================================
+EXPORT SYSTEM
+========================================================================
+
+Every table inside the application
+should support exporting.
+
+Example
+
+Export Visible Data
+
+Export Entire Table
+
+Export Selected Rows
+
+Never require copying manually.
+
+========================================================================
+HISTORY SYSTEM
+========================================================================
+
+Everything that happens inside the software
+should become part of project history.
+
+Examples
+
+Project Created
+
+Excel Imported
+
+Participant Edited
+
+Certificate Renamed
+
+Manual Match
+
+Email Template Changed
+
+Email Sent
+
+Settings Changed
+
+Recovery Executed
+
+Everything should be timestamped.
+
+========================================================================
+HISTORY ENTRY
+========================================================================
+
+Each history item contains
+
+Timestamp
+
+Module
+
+Action
+
+Description
+
+User
+
+Additional Metadata
+
+Example
+
+2027-01-12 10:45:16
+
+Rename Module
+
+Manual Correction
+
+Changed
+
+"Debashis"
+
+↓
+
+"Debasish Mohanty"
+
+========================================================================
+PROJECT TIMELINE
+========================================================================
+
+Provide a visual timeline.
+
+Project Created
+
+↓
+
+Certificates Imported
+
+↓
+
+Rename Completed
+
+↓
+
+Participants Imported
+
+↓
+
+Matching Completed
+
+↓
+
+Emails Sent
+
+↓
+
+Project Archived
+
+This allows understanding project progress instantly.
+
+========================================================================
+APPLICATION LOGGING
+========================================================================
+
+Logging is different from history.
+
+History records user actions.
+
+Logs record software operations.
+
+Examples
+
+Database Opened
+
+SMTP Connected
+
+SQLite Query
+
+OCR Started
+
+Worker Thread Created
+
+Email Queue Generated
+
+Logs assist debugging.
+
+========================================================================
+LOG LEVELS
+========================================================================
+
+Support
+
+INFO
+
+WARNING
+
+ERROR
+
+CRITICAL
+
+DEBUG (Optional)
+
+Allow filtering.
+
+========================================================================
+LOG STORAGE
+========================================================================
+
+Logs should be stored
+
+inside the project
+
+AND
+
+inside application logs.
+
+Example
+
+Projects/
+
+Future X/
+
+Logs/
+
+rename.log
+
+email.log
+
+database.log
+
+application.log
+
+========================================================================
+SEARCHABLE LOGS
+========================================================================
+
+Logs should support
+
+Search
+
+Copy
+
+Export
+
+Filter
+
+Timestamp Filter
+
+Module Filter
+
+========================================================================
+APPLICATION SETTINGS
+========================================================================
+
+Settings should be grouped.
+
+General
+
+Appearance
+
+Email
+
+OCR
+
+Performance
+
+Backup
+
+Advanced
+
+Never place unrelated settings together.
+
+========================================================================
+GENERAL SETTINGS
+========================================================================
+
+Theme
+
+Language
+
+Auto Save
+
+Default Project Folder
+
+Startup Behavior
+
+Recent Project Count
+
+========================================================================
+APPEARANCE
+========================================================================
+
+Support
+
+Dark Mode
+
+Light Mode
+
+System Theme (Future)
+
+Font Scaling
+
+UI Zoom
+
+========================================================================
+EMAIL SETTINGS
+========================================================================
+
+Default Sender Name
+
+Email Provider
+
+Default Delay
+
+Retry Count
+
+Retry Delay
+
+Daily Sending Limit
+
+Warning Threshold
+
+========================================================================
+OCR SETTINGS
+========================================================================
+
+Preferred OCR Engine
+
+Confidence Threshold
+
+Language
+
+CPU Threads
+
+GPU Acceleration (Future)
+
+========================================================================
+BACKUP SETTINGS
+========================================================================
+
+Auto Backup
+
+Backup Frequency
+
+Maximum Backup Count
+
+Backup Location
+
+========================================================================
+DATABASE DESIGN
+========================================================================
+
+Use SQLite.
+
+Never use Excel as the primary database.
+
+Excel is only an import source.
+
+The database is the single source of truth.
+
+========================================================================
+DATABASE TABLES
+========================================================================
+
+Recommended tables
+
+Projects
+
+Participants
+
+Certificates
+
+CertificateMappings
+
+Templates
+
+EmailQueue
+
+History
+
+Logs
+
+Settings
+
+Backups
+
+Future tables may be added without schema redesign.
+
+========================================================================
+PARTICIPANT TABLE
+========================================================================
+
+Suggested fields
+
+InternalID
+
+FullName
+
+Email
+
+Phone
+
+College
+
+Department
+
+Designation
+
+CertificateID
+
+EmailStatus
+
+CreatedAt
+
+UpdatedAt
+
+Never use participant names
+as primary keys.
+
+Always use internal IDs.
+
+========================================================================
+CERTIFICATE TABLE
+========================================================================
+
+Suggested fields
+
+CertificateID
+
+OriginalFilename
+
+RenamedFilename
+
+FilePath
+
+ExtractionMethod
+
+Confidence
+
+ManualCorrection
+
+Ignored
+
+CreatedAt
+
+========================================================================
+EMAIL QUEUE TABLE
+========================================================================
+
+Stores
+
+Queue Position
+
+ParticipantID
+
+CertificateID
+
+Subject
+
+Body
+
+Attachment
+
+Status
+
+Attempts
+
+SentTime
+
+Error
+
+This table enables crash recovery.
+
+========================================================================
+THREADING ARCHITECTURE
+========================================================================
+
+The GUI must NEVER freeze.
+
+All heavy work runs in background threads.
+
+Examples
+
+OCR
+
+Email Sending
+
+File Copying
+
+PDF Rendering
+
+Excel Import
+
+Database Backup
+
+The UI thread is responsible ONLY
+for interface updates.
+
+Never perform blocking operations
+inside the GUI thread.
+
+========================================================================
+TASK QUEUE
+========================================================================
+
+Use a task queue.
+
+Long operations become jobs.
+
+Jobs
+
+Pending
+
+Running
+
+Completed
+
+Failed
+
+Cancelled
+
+The UI observes job status.
+
+========================================================================
+PROGRESS NOTIFICATION SYSTEM
+========================================================================
+
+Background workers communicate
+through thread-safe signals.
+
+Never directly manipulate widgets
+from worker threads.
+
+========================================================================
+FILE SAFETY
+========================================================================
+
+Never modify original certificates.
+
+Original files are read-only.
+
+Renamed copies are created
+inside the project.
+
+Original user files remain untouched forever.
+
+========================================================================
+SECURITY
+========================================================================
+
+Never store Gmail App Passwords
+as plain text.
+
+Encrypt before storage.
+
+Never log passwords.
+
+Never expose passwords in error messages.
+
+Never transmit unnecessary information.
+
+========================================================================
+PRIVACY
+========================================================================
+
+The software operates entirely offline
+except during email sending.
+
+Participant information
+must never be uploaded
+to external servers.
+
+OCR
+
+SQLite
+
+Matching
+
+Template Rendering
+
+Everything happens locally.
+
+========================================================================
+ERROR HANDLING
+========================================================================
+
+Every exception should be caught.
+
+Never allow Python tracebacks
+to reach normal users.
+
+Instead
+
+display
+
+What happened
+
+Why it happened
+
+Suggested solution
+
+Example
+
+Unable to read PDF
+
+Possible reasons
+
+Corrupted file
+
+Permission denied
+
+Password protected
+
+Buttons
+
+Retry
+
+Skip
+
+Open Folder
+
+========================================================================
+NETWORK FAILURES
+========================================================================
+
+If internet disconnects
+
+Pause Queue
+
+Display
+
+Internet Connection Lost
+
+Waiting To Reconnect
+
+Resume automatically
+when possible.
+
+========================================================================
+GMAIL FAILURES
+========================================================================
+
+Authentication Failed
+
+Wrong App Password
+
+Daily Limit Reached
+
+SMTP Timeout
+
+Temporary Server Error
+
+Each error requires
+a user-friendly explanation.
+
+========================================================================
+FILE FAILURES
+========================================================================
+
+Examples
+
+Certificate Missing
+
+Certificate Locked
+
+Access Denied
+
+Disk Full
+
+Read Only
+
+Provide recovery options.
+
+========================================================================
+RECOVERY SYSTEM
+========================================================================
+
+Every critical operation
+must be recoverable.
+
+Recovery includes
+
+Project Recovery
+
+Queue Recovery
+
+Auto Save Recovery
+
+Backup Restore
+
+Undo (Where Safe)
+
+========================================================================
+BACKUP SYSTEM
+========================================================================
+
+Create automatic backups.
+
+Recommended moments
+
+Before Import
+
+Before Rename
+
+Before Sending
+
+Before Delete
+
+Backups should be timestamped.
+
+========================================================================
+ARCHIVING
+========================================================================
+
+Completed projects
+may be archived.
+
+Archive includes
+
+Database
+
+Templates
+
+Certificates
+
+Reports
+
+Logs
+
+History
+
+Nothing is deleted.
+
+========================================================================
+PLUGIN ARCHITECTURE
+========================================================================
+
+Future versions should support plugins.
+
+Possible plugins
+
+Outlook
+
+Resend
+
+WhatsApp
+
+SMS
+
+Cloud Storage
+
+QR Verification
+
+Digital Signature
+
+Attendance Integration
+
+The application architecture should
+allow adding plugins
+without modifying existing modules.
+
+========================================================================
+PERFORMANCE REQUIREMENTS
+========================================================================
+
+Target
+
+1000 Participants
+
+1000 Certificates
+
+should operate smoothly
+on a typical modern laptop.
+
+Operations should remain responsive.
+
+Memory leaks are unacceptable.
+
+========================================================================
+CODE QUALITY REQUIREMENTS
+========================================================================
+
+The generated code must be
+
+Readable
+
+Modular
+
+Documented
+
+Typed where appropriate
+
+Object Oriented
+
+Reusable
+
+Maintainable
+
+Avoid
+
+God Classes
+
+Massive Functions
+
+Hardcoded Values
+
+Duplicate Code
+
+Global Variables
+
+========================================================================
+PROJECT STRUCTURE
+========================================================================
+
+Recommended structure
+
+app/
+
+ui/
+
+modules/
+
+database/
+
+models/
+
+services/
+
+email/
+
+ocr/
+
+matching/
+
+reports/
+
+utils/
+
+workers/
+
+assets/
+
+themes/
+
+config/
+
+logs/
+
+tests/
+
+main.py
+
+Each folder should have
+a single responsibility.
+
+========================================================================
+TESTING REQUIREMENTS
+========================================================================
+
+The software should be designed
+to support automated testing.
+
+Critical areas
+
+Matching
+
+Template Rendering
+
+Queue Generation
+
+Database Operations
+
+Email Validation
+
+Placeholder Engine
+
+File Safety
+
+========================================================================
+FUTURE ROADMAP
+========================================================================
+
+Version 1
+
+Desktop
+
+Gmail
+
+OCR
+
+SQLite
+
+Projects
+
+Version 2
+
+Outlook
+
+Resend
+
+Google Sheets
+
+Multiple Attachments
+
+Version 3
+
+Cloud Sync
+
+Team Collaboration
+
+Role-Based Access
+
+Email Scheduling
+
+Analytics Dashboard
+
+Version 4
+
+Web Application
+
+Mobile Companion
+
+Certificate Verification Portal
+
+REST API
+
+========================================================================
+FINAL DEVELOPMENT PRINCIPLE
+========================================================================
+
+Throughout development,
+always prioritize
+
+Reliability
+
+Data Integrity
+
+User Confidence
+
+Recoverability
+
+Maintainability
+
+Scalability
+
+The application should never perform destructive operations
+without explicit user confirmation.
+
+Every major operation should be reversible where technically possible.
+
+Every important action should be logged.
+
+Every project should be recoverable.
+
+Every participant should receive the correct certificate.
+
+That single principle is more important than performance,
+visual effects, or automation.
+
+========================================================================
+END OF MASTER SPECIFICATION
+========================================================================
