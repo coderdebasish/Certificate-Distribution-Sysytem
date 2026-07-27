@@ -54,10 +54,16 @@ class Signal:
     # Convenience constructors -----------------------------------------------
 
     @classmethod
-    def progress(cls, current: int, total: int, message: str = "") -> "Signal":
+    def progress(cls, current: int, total: int, message: str = "", elapsed_sec: int = 0, eta_sec: int = 0) -> "Signal":
         return cls(
             type=SignalType.PROGRESS_UPDATE,
-            payload={"current": current, "total": total, "message": message},
+            payload={
+                "current": current,
+                "total": total,
+                "message": message,
+                "elapsed_sec": elapsed_sec,
+                "eta_sec": eta_sec,
+            },
         )
 
     @classmethod

@@ -52,13 +52,15 @@ class CDMSApplication:
         self.settings = AppSettings.load()
         setup_logging()
 
-        # Configure appearance
-        ctk.set_appearance_mode(self.settings.theme)
+        # Configure appearance (Enforce dark mode globally across entire software)
+        self.settings.theme = "dark"
+        ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
-        self.palette = get_palette(self.settings.theme)
+        self.palette = get_palette("dark")
 
         # Root window
-        self.root = ctk.CTk()
+        self.root = ctk.CTk(fg_color=self.palette.bg_primary)
+        self.root.configure(fg_color=self.palette.bg_primary)
         self.root.title(WINDOW_TITLE)
         self.root.minsize(WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT)
         self.root.geometry(

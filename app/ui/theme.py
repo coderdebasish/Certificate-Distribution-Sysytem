@@ -56,6 +56,10 @@ class ColorPalette:
     table_header: str
     table_selected: str
 
+    # Card / Input (aliases)
+    bg_card: str
+    bg_input: str
+
     # Border
     border: str
 
@@ -87,6 +91,8 @@ DARK_PALETTE = ColorPalette(
     table_row_odd="#1A2744",
     table_header="#0D1B2A",
     table_selected="#1565C0",
+    bg_card="#16213E",
+    bg_input="#0F3460",
     border="#37474F",
 )
 
@@ -117,6 +123,8 @@ LIGHT_PALETTE = ColorPalette(
     table_row_odd="#F5F7FA",
     table_header="#1E3A5F",
     table_selected="#BBDEFB",
+    bg_card="#FFFFFF",
+    bg_input="#EEF2F7",
     border="#CFD8DC",
 )
 

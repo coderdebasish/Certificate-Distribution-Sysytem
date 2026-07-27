@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import queue
+import time
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -30,9 +31,6 @@ class OCRWorker(BaseWorker):
     """
     Scans certificate PDFs in *source_folder* (or *pdf_folder*) and emits one
     ``CERTIFICATE_ANALYZED`` signal per file with the detected name.
-
-    Text extraction is attempted first (faster).
-    PaddleOCR is only invoked if text extraction yields nothing useful.
     """
 
     def __init__(
@@ -71,25 +69,40 @@ class OCRWorker(BaseWorker):
             from app.database.repositories.certificate_repo import CertificateRepository
             repo = CertificateRepository(self._db_conn)
 
+        start_time = time.time()
         for idx, pdf_path in enumerate(pdfs, start=1):
             if self._should_stop():
                 self._emit(Signal(type=SignalType.WORKER_STOPPED))
                 return
             self._wait_if_paused()
 
-            self._emit(Signal.progress(idx, total, f"Analyzing {pdf_path.name}"))
+            elapsed = time.time() - start_time
+            avg_per_item = elapsed / idx if idx > 0 else 0
+            remaining_items = total - idx
+            eta_sec = int(avg_per_item * remaining_items)
+
+            self._emit(Signal.progress(
+                idx, total,
+                f"Analyzing {pdf_path.name} ({idx}/{total})",
+                elapsed_sec=int(elapsed),
+                eta_sec=eta_sec,
+            ))
             self._emit(Signal.log(f"Reading {pdf_path.name}"))
 
             try:
-                result = self._analyze_pdf(pdf_path)
+                result, err_type = self._analyze_pdf(pdf_path)
                 
                 if repo and self._project_id:
                     from app.models.certificate import Certificate, CertificateStatus, ExtractionMethod
                     status = CertificateStatus.READY if (result.confidence >= 50.0 and result.detected_name) else CertificateStatus.NEEDS_REVIEW
-                    if result.method == "failed":
+                    if err_type == "encrypted":
+                        status = CertificateStatus.ENCRYPTED_PDF
+                    elif err_type == "corrupt":
+                        status = CertificateStatus.CORRUPTED_FILE
+                    elif result.method == "failed":
                         status = CertificateStatus.FAILED
                     
-                    method_enum = ExtractionMethod.TEXT if result.method == "text" else \
+                    method_enum = ExtractionMethod.TEXT if result.method in ("text", "font_size", "keyword", "layout") else \
                                   ExtractionMethod.OCR if result.method == "ocr" else ExtractionMethod.FAILED
                     
                     existing = repo.get_by_filename(self._project_id, pdf_path.name)
@@ -99,6 +112,8 @@ class OCRWorker(BaseWorker):
                         existing.extraction_method = method_enum
                         existing.raw_extracted_text = result.raw_text_used
                         existing.status = status
+                        if err_type != "ok":
+                            existing.failure_reason = err_type.upper()
                         repo.update(existing)
                     else:
                         cert = Certificate(
@@ -110,6 +125,7 @@ class OCRWorker(BaseWorker):
                             extraction_method=method_enum,
                             raw_extracted_text=result.raw_text_used,
                             status=status,
+                            failure_reason=err_type.upper() if err_type != "ok" else "",
                         )
                         repo.insert(cert)
 
@@ -141,34 +157,54 @@ class OCRWorker(BaseWorker):
     # Internal
     # -----------------------------------------------------------------------
 
-    def _analyze_pdf(self, pdf_path: Path) -> NameDetectionResult:
+    def _analyze_pdf(self, pdf_path: Path) -> tuple[NameDetectionResult, str]:
         """Attempt text extraction first, fall back to OCR."""
-        # Stage 1: Text extraction via PyMuPDF
-        raw_text = self._extract_text_pymupdf(pdf_path)
-        if raw_text.strip():
-            self._emit(Signal.log(f"  Text extraction successful for {pdf_path.name}"))
-            res = self._name_detector.detect(raw_text)
-            res.method = "text"
-            return res
+        try:
+            doc = fitz.open(str(pdf_path))
+            if doc.is_encrypted:
+                doc.close()
+                return NameDetectionResult(method="encrypted", confidence=0.0), "encrypted"
+            
+            raw_text_lines = []
+            spans = []
+            for page in doc:
+                raw_text_lines.append(page.get_text())
+                pdict = page.get_text("dict")
+                for block in pdict.get("blocks", []):
+                    if "lines" in block:
+                        for line in block["lines"]:
+                            for s in line.get("spans", []):
+                                text = s.get("text", "").strip()
+                                if text:
+                                    spans.append({
+                                        "text": text,
+                                        "size": s.get("size", 0.0),
+                                        "font": s.get("font", ""),
+                                        "bbox": s.get("bbox", (0, 0, 0, 0)),
+                                    })
+            doc.close()
+            raw_text = "\n".join(raw_text_lines)
+
+            if raw_text.strip():
+                self._emit(Signal.log(f"  Text extraction successful for {pdf_path.name}"))
+                res = self._name_detector.detect(raw_text, spans=spans)
+                if not res.method:
+                    res.method = "text"
+                return res, "ok"
+        except fitz.FileDataError:
+            return NameDetectionResult(method="corrupt", confidence=0.0), "corrupt"
+        except Exception as exc:
+            logger.warning("PyMuPDF failed on %s: %s", pdf_path, exc)
+            return NameDetectionResult(method="failed", confidence=0.0), "failed"
 
         # Stage 2: OCR
         if self._ocr_engine.is_available():
             self._emit(Signal.log(f"  No text found — running OCR on {pdf_path.name}"))
             ocr_result = self._ocr_engine.extract_text_from_pdf_page(pdf_path, 0)
             res = self._name_detector.detect(ocr_result.text)
-            res.method = "ocr"
-            return res
+            if not res.method:
+                res.method = "ocr"
+            return res, "ok"
 
         # Stage 3: Nothing worked
-        return NameDetectionResult(method="failed", confidence=0.0)
-
-    @staticmethod
-    def _extract_text_pymupdf(pdf_path: Path) -> str:
-        try:
-            doc = fitz.open(str(pdf_path))
-            text = "\n".join(page.get_text() for page in doc)
-            doc.close()
-            return text
-        except Exception as exc:
-            logger.warning("PyMuPDF failed on %s: %s", pdf_path, exc)
-            return ""
+        return NameDetectionResult(method="failed", confidence=0.0), "failed"

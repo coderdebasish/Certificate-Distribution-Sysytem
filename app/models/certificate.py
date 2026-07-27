@@ -29,6 +29,8 @@ class CertificateStatus(str, Enum):
     RENAMED = "renamed"         # Renamed copy exists
     IGNORED = "ignored"         # User marked as ignore (cover page, etc.)
     FAILED = "failed"           # Analysis or rename failed
+    ENCRYPTED_PDF = "encrypted_pdf" # Password protected PDF
+    CORRUPTED_FILE = "corrupted_file" # Corrupted / unreadable PDF file
 
 
 @dataclass
