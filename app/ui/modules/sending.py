@@ -15,6 +15,7 @@ import customtkinter as ctk
 
 from app.models.email_queue import QueueStatus, EmailQueueItem
 from app.models.email_template import EmailTemplate
+from app.models.certificate import Certificate
 from app.services.email.gmail_provider import GmailProvider
 from app.services.email.queue_manager import QueueBuilder
 from app.ui.theme import ColorPalette, FontSystem
@@ -161,19 +162,44 @@ class SendingView:
         if not items and self._app.participant_repo:
             participants = self._app.participant_repo.get_all(self._app.active_project.id)
             if participants:
-                certs = {c.id: c for c in self._app.certificate_repo.get_all(self._app.active_project.id)} if self._app.certificate_repo else {}
+                # 1. Ensure email template exists in DB
                 templates = self._app.template_repo.get_all(self._app.active_project.id) if self._app.template_repo else []
-                active_tmpl = templates[0] if templates else EmailTemplate(
-                    project_id=self._app.active_project.id,
-                    name="Default",
-                    subject="Certificate of Participation for {name} - {event_name}",
-                    body_html="Dear {name},<br><br>Please find your certificate attached.<br><br>Best regards,<br>{college}"
-                )
+                if templates:
+                    active_tmpl = templates[0]
+                else:
+                    active_tmpl = EmailTemplate(
+                        project_id=self._app.active_project.id,
+                        name="Default Email Template",
+                        subject="Certificate of Participation for {name} - {event_name}",
+                        body_html="Dear {name},<br><br>Please find your official Certificate of Participation attached to this email.<br><br>Best regards,<br>Organizing Team<br>{college}",
+                    )
+                    if self._app.template_repo:
+                        active_tmpl = self._app.template_repo.insert(active_tmpl)
+
+                # 2. Map existing certificates
+                certs = {c.id: c for c in self._app.certificate_repo.get_all(self._app.active_project.id)} if self._app.certificate_repo else {}
 
                 builder = QueueBuilder()
                 new_items, errors = builder.build(self._app.active_project, participants, certs, active_tmpl)
-                for item in new_items:
-                    self._app.queue_repo.insert(item)
+
+                # 3. Ensure every item has a valid certificate_id in DB (foreign key safety)
+                if self._app.certificate_repo:
+                    for item in new_items:
+                        if item.certificate_id == 0 and item.attachment_path:
+                            p_path = Path(item.attachment_path)
+                            c_obj = Certificate(
+                                project_id=self._app.active_project.id,
+                                original_filename=p_path.name,
+                                original_file_path=str(p_path),
+                                renamed_filename=p_path.name,
+                                renamed_file_path=str(p_path),
+                                detected_name=p_path.stem,
+                            )
+                            inserted_cert = self._app.certificate_repo.insert(c_obj)
+                            item.certificate_id = inserted_cert.id
+
+                if new_items:
+                    self._app.queue_repo.insert_many(new_items)
 
                 if errors:
                     for err in errors[:5]:

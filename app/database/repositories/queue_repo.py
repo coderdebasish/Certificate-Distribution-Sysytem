@@ -21,6 +21,40 @@ class QueueRepository:
     def __init__(self, db: DatabaseConnection) -> None:
         self._db = db
 
+    def insert(self, item: EmailQueueItem) -> EmailQueueItem:
+        with self._db.transaction() as cur:
+            cur.execute(
+                """
+                INSERT INTO email_queue (
+                    project_id, queue_position, participant_id, certificate_id,
+                    template_id, to_email, to_name, subject, body_html,
+                    attachment_path, status, attempts, created_at, updated_at
+                ) VALUES (
+                    :project_id, :queue_position, :participant_id, :certificate_id,
+                    :template_id, :to_email, :to_name, :subject, :body_html,
+                    :attachment_path, :status, :attempts, :created_at, :updated_at
+                )
+                """,
+                {
+                    "project_id": item.project_id,
+                    "queue_position": item.queue_position,
+                    "participant_id": item.participant_id,
+                    "certificate_id": item.certificate_id,
+                    "template_id": item.template_id,
+                    "to_email": item.to_email,
+                    "to_name": item.to_name,
+                    "subject": item.subject,
+                    "body_html": item.body_html,
+                    "attachment_path": item.attachment_path,
+                    "status": item.status.value if hasattr(item.status, "value") else str(item.status),
+                    "attempts": item.attempts,
+                    "created_at": item.created_at,
+                    "updated_at": item.updated_at,
+                },
+            )
+            item.id = cur.lastrowid
+        return item
+
     def insert_many(self, items: list[EmailQueueItem]) -> None:
         """Bulk-insert all queue items in a single transaction."""
         with self._db.transaction() as cur:
