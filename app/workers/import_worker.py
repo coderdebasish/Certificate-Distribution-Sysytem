@@ -1,0 +1,154 @@
+"""
+app.workers.import_worker
+==========================
+Background worker for importing participants from an Excel file.
+
+Validates every row, detects duplicates, and emits progress signals.
+The UI thread never blocks during large imports.
+"""
+
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from app.workers.base_worker import BaseWorker
+from app.workers.signals import Signal, SignalType
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ImportRow:
+    """One validated participant row ready for database insertion."""
+    row_number: int
+    name: str
+    email: str
+    phone: str = ""
+    college: str = ""
+    department: str = ""
+    designation: str = ""
+    remarks: str = ""
+    is_valid: bool = True
+    error_message: str = ""
+
+
+class ImportWorker(BaseWorker):
+    """
+    Reads an Excel file, validates rows, and emits ImportRow signals.
+
+    The actual database insertion is handled by the module controller
+    that listens to ``IMPORT_ROW_PROCESSED`` signals.
+
+    Column mapping is provided by the caller (result of the import wizard).
+    """
+
+    def __init__(
+        self,
+        file_path: Path,
+        column_mapping: dict[str, str],  # {"Name": "full_name", "Email": "email", ...}
+        existing_emails: set[str] | None = None,
+    ) -> None:
+        super().__init__()
+        self._file_path = file_path
+        self._column_mapping = column_mapping
+        self._existing_emails = existing_emails or set()
+
+    def _run(self) -> None:
+        self._emit(Signal.log(f"Opening {self._file_path.name}..."))
+
+        try:
+            rows = self._read_excel()
+        except Exception as exc:
+            self._emit(Signal.error(
+                message=f"Cannot read Excel file: {self._file_path.name}",
+                details=str(exc),
+            ))
+            return
+
+        total = len(rows)
+        self._emit(Signal.log(f"{total} row(s) found in spreadsheet."))
+
+        valid = 0
+        invalid = 0
+
+        for idx, raw_row in enumerate(rows, start=1):
+            if self._should_stop():
+                self._emit(Signal(type=SignalType.WORKER_STOPPED))
+                return
+
+            self._emit(Signal.progress(idx, total, f"Processing row {idx}"))
+            import_row = self._validate_row(idx, raw_row)
+
+            if import_row.is_valid:
+                valid += 1
+            else:
+                invalid += 1
+
+            self._emit(Signal(
+                type=SignalType.IMPORT_ROW_PROCESSED,
+                payload={
+                    "row": import_row,
+                    "is_valid": import_row.is_valid,
+                    "error": import_row.error_message,
+                },
+            ))
+
+        self._emit(Signal(
+            type=SignalType.IMPORT_COMPLETE,
+            payload={"total": total, "valid": valid, "invalid": invalid},
+        ))
+        self._emit(Signal.complete(
+            f"Import parsed — Valid: {valid} / Invalid: {invalid} / Total: {total}"
+        ))
+
+    # -----------------------------------------------------------------------
+    # Internal
+    # -----------------------------------------------------------------------
+
+    def _read_excel(self) -> list[dict[str, Any]]:
+        import openpyxl
+        wb = openpyxl.load_workbook(str(self._file_path), read_only=True, data_only=True)
+        ws = wb.active
+        rows_iter = ws.iter_rows(values_only=True)
+        headers = [str(h).strip() if h else "" for h in next(rows_iter)]
+        data = []
+        for row in rows_iter:
+            row_dict = {headers[i]: (cell or "") for i, cell in enumerate(row)}
+            data.append(row_dict)
+        wb.close()
+        return data
+
+    def _validate_row(self, row_number: int, raw_row: dict[str, Any]) -> ImportRow:
+        inv_map = {v: k for k, v in self._column_mapping.items()}
+
+        def get(field: str) -> str:
+            excel_col = inv_map.get(field, field)
+            return str(raw_row.get(excel_col, "") or "").strip()
+
+        name = get("full_name")
+        email = get("email")
+
+        if not name:
+            return ImportRow(row_number=row_number, name=name, email=email,
+                             is_valid=False, error_message="Name is required.")
+        if not email or "@" not in email:
+            return ImportRow(row_number=row_number, name=name, email=email,
+                             is_valid=False, error_message=f"Invalid email: '{email}'")
+        if email.lower() in {e.lower() for e in self._existing_emails}:
+            return ImportRow(row_number=row_number, name=name, email=email,
+                             is_valid=False, error_message=f"Duplicate email: {email}")
+
+        return ImportRow(
+            row_number=row_number,
+            name=name,
+            email=email,
+            phone=get("phone"),
+            college=get("college"),
+            department=get("department"),
+            designation=get("designation"),
+            remarks=get("remarks"),
+            is_valid=True,
+        )
