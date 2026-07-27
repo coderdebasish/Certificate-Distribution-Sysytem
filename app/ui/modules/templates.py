@@ -1,8 +1,8 @@
 """
 app.ui.modules.templates
-=========================
+========================
 Email Template Editor Module — Rich Subject & HTML Body Editor with
-individual candidate live email preview and embedded PDF attachment viewer.
+individual candidate live email preview, Prev/Next navigation, and embedded PDF attachment viewer.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ _PLACEHOLDERS = [
 
 
 class TemplatesView:
-    """Full Email Template Editor view with candidate-by-candidate live preview engine."""
+    """Full Email Template Editor view with candidate-by-candidate live preview engine & Prev/Next navigation."""
 
     def __init__(self, parent, app, palette: ColorPalette, fonts: FontSystem) -> None:
         self._app = app
@@ -42,6 +42,7 @@ class TemplatesView:
         self._engine = PlaceholderEngine()
         self._participants: list[Participant] = []
         self._selected_participant: Participant | None = None
+        self._current_participant_idx: int = 0
 
         self.frame = ctk.CTkFrame(parent, fg_color=palette.bg_primary)
         self.frame.grid_rowconfigure(1, weight=1)
@@ -123,14 +124,38 @@ class TemplatesView:
 
         ctk.CTkLabel(prev_head, text="Candidate Email Preview", font=(f.family, f.size_sm, "bold"), text_color=p.text_primary).pack(side="left")
 
+        # Candidate Prev / Next Navigation bar
+        nav_frame = ctk.CTkFrame(prev_head, fg_color="transparent")
+        nav_frame.pack(side="right")
+
+        self._btn_prev_cand = ctk.CTkButton(
+            nav_frame, text="◀ Prev", width=65, height=28,
+            fg_color=p.bg_secondary, hover_color=p.accent, text_color=p.text_primary,
+            font=(f.family, f.size_xs, "bold"), command=self._prev_candidate
+        )
+        self._btn_prev_cand.pack(side="left", padx=(0, 4))
+
+        self._cand_count_lbl = ctk.CTkLabel(
+            nav_frame, text="0 / 0", font=(f.family, f.size_xs, "bold"),
+            text_color=p.text_secondary, width=50
+        )
+        self._cand_count_lbl.pack(side="left", padx=2)
+
+        self._btn_next_cand = ctk.CTkButton(
+            nav_frame, text="Next ▶", width=65, height=28,
+            fg_color=p.bg_secondary, hover_color=p.accent, text_color=p.text_primary,
+            font=(f.family, f.size_xs, "bold"), command=self._next_candidate
+        )
+        self._btn_next_cand.pack(side="left", padx=(4, 8))
+
         # Candidate Dropdown Selector
-        self._candidate_var = ctk.StringVar(value="Sample Candidate (Debasish Mohanty)")
+        self._candidate_var = ctk.StringVar(value="Sample Candidate")
         self._candidate_dropdown = ctk.CTkOptionMenu(
-            prev_head, variable=self._candidate_var, values=["Sample Candidate (Debasish Mohanty)"],
-            width=220, height=28, fg_color=p.bg_input, text_color=p.text_primary, dropdown_fg_color=p.bg_card,
+            nav_frame, variable=self._candidate_var, values=["Sample Candidate"],
+            width=180, height=28, fg_color=p.bg_input, text_color=p.text_primary, dropdown_fg_color=p.bg_card,
             command=self._on_candidate_selected
         )
-        self._candidate_dropdown.pack(side="right")
+        self._candidate_dropdown.pack(side="left")
 
         self._subject_preview = ctk.CTkLabel(preview_panel, text="", font=(f.family, f.size_sm, "bold"), text_color=p.accent, anchor="w", wraplength=400)
         self._subject_preview.pack(fill="x", padx=16, pady=(4, 4))
@@ -173,17 +198,37 @@ class TemplatesView:
             names = [f"{p.full_name} ({p.email})" for p in self._participants]
             if names:
                 self._candidate_dropdown.configure(values=names)
-                self._candidate_var.set(names[0])
-                self._selected_participant = self._participants[0]
+                self._select_candidate_by_idx(0)
 
         self._update_preview()
+
+    def _prev_candidate(self) -> None:
+        if not self._participants:
+            return
+        new_idx = (self._current_participant_idx - 1) % len(self._participants)
+        self._select_candidate_by_idx(new_idx)
+
+    def _next_candidate(self) -> None:
+        if not self._participants:
+            return
+        new_idx = (self._current_participant_idx + 1) % len(self._participants)
+        self._select_candidate_by_idx(new_idx)
+
+    def _select_candidate_by_idx(self, idx: int) -> None:
+        if 0 <= idx < len(self._participants):
+            self._current_participant_idx = idx
+            p = self._participants[idx]
+            self._selected_participant = p
+            label_text = f"{p.full_name} ({p.email})"
+            self._candidate_var.set(label_text)
+            self._cand_count_lbl.configure(text=f"{idx + 1} / {len(self._participants)}")
+            self._update_preview()
 
     def _on_candidate_selected(self, choice: str) -> None:
-        for p in self._participants:
+        for idx, p in enumerate(self._participants):
             if f"{p.full_name} ({p.email})" == choice:
-                self._selected_participant = p
+                self._select_candidate_by_idx(idx)
                 break
-        self._update_preview()
 
     # -----------------------------------------------------------------------
     # Actions & Live Preview Updates
@@ -277,7 +322,6 @@ class TemplatesView:
                 subject=subj,
                 body_html=body,
                 body_text=body,
-                is_default=True,
             )
             self._current_template = self._app.template_repo.insert(tmpl)
 
