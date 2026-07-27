@@ -10,8 +10,10 @@ Originals are NEVER modified.
 from __future__ import annotations
 
 import logging
+import queue
 import shutil
 from pathlib import Path
+from typing import Optional
 
 from app.workers.base_worker import BaseWorker
 from app.workers.signals import Signal, SignalType
@@ -35,9 +37,17 @@ class RenameWorker(BaseWorker):
     On failure: emits CERTIFICATE_FAILED with reason.
     """
 
-    def __init__(self, jobs: list[RenameJob]) -> None:
-        super().__init__()
-        self._jobs = jobs
+    def __init__(
+        self,
+        jobs: list[RenameJob] | None = None,
+        signal_queue: Optional[queue.Queue[Signal]] = None,
+        db_conn=None,
+        project_id: int = 0,
+    ) -> None:
+        super().__init__(signal_queue=signal_queue)
+        self._jobs = jobs or []
+        self._db_conn = db_conn
+        self._project_id = project_id
 
     def _run(self) -> None:
         total = len(self._jobs)

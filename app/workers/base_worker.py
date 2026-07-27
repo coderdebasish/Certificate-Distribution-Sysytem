@@ -28,12 +28,12 @@ class BaseWorker(ABC):
     progress updates.  The UI retrieves signals via ``self.signal_queue``.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, signal_queue: queue.Queue[Signal] | None = None) -> None:
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
         self._pause_event = threading.Event()
         self._pause_event.set()   # Not paused by default
-        self.signal_queue: queue.Queue[Signal] = queue.Queue()
+        self.signal_queue: queue.Queue[Signal] = signal_queue if signal_queue is not None else queue.Queue()
 
     # -----------------------------------------------------------------------
     # Control API (called from UI thread)

@@ -11,12 +11,14 @@ The GUI thread never blocks — it just polls signal_queue.
 from __future__ import annotations
 
 import logging
+import queue
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Optional
 
 import fitz  # PyMuPDF
 
-from app.services.ocr.base import OCREngine
+from app.services.ocr.base import OCREngine, OCRResult
+from app.services.ocr.paddle_ocr import PaddleOCREngine
 from app.services.ocr.name_detector import NameDetector, NameDetectionResult
 from app.workers.base_worker import BaseWorker
 from app.workers.signals import Signal, SignalType
@@ -26,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 class OCRWorker(BaseWorker):
     """
-    Scans certificate PDFs in *source_folder* and emits one
+    Scans certificate PDFs in *source_folder* (or *pdf_folder*) and emits one
     ``CERTIFICATE_ANALYZED`` signal per file with the detected name.
 
     Text extraction is attempted first (faster).
@@ -35,15 +37,23 @@ class OCRWorker(BaseWorker):
 
     def __init__(
         self,
-        source_folder: Path,
-        ocr_engine: OCREngine,
+        signal_queue: Optional[queue.Queue[Signal]] = None,
+        pdf_folder: Path | str | None = None,
+        source_folder: Path | str | None = None,
+        ocr_engine: Optional[OCREngine] = None,
         pdf_paths: list[Path] | None = None,
+        db_conn=None,
+        project_id: int = 0,
+        ocr_threshold: float = 70.0,
     ) -> None:
-        super().__init__()
-        self._source_folder = source_folder
-        self._ocr_engine = ocr_engine
+        super().__init__(signal_queue=signal_queue)
+        folder_path = pdf_folder or source_folder or "."
+        self._source_folder = Path(folder_path)
+        self._db_conn = db_conn
+        self._project_id = project_id
+        self._ocr_threshold = ocr_threshold
+        self._ocr_engine = ocr_engine or PaddleOCREngine()
         self._name_detector = NameDetector()
-        # If specific files are provided, only process those
         self._pdf_paths = pdf_paths
 
     def _run(self) -> None:

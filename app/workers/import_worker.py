@@ -10,9 +10,10 @@ The UI thread never blocks during large imports.
 from __future__ import annotations
 
 import logging
+import queue
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from app.workers.base_worker import BaseWorker
 from app.workers.signals import Signal, SignalType
@@ -47,14 +48,19 @@ class ImportWorker(BaseWorker):
 
     def __init__(
         self,
-        file_path: Path,
-        column_mapping: dict[str, str],  # {"Name": "full_name", "Email": "email", ...}
+        file_path: Path | str,
+        column_mapping: dict[str, str] | None = None,
         existing_emails: set[str] | None = None,
+        signal_queue: Optional[queue.Queue[Signal]] = None,
+        db_conn=None,
+        project_id: int = 0,
     ) -> None:
-        super().__init__()
-        self._file_path = file_path
-        self._column_mapping = column_mapping
+        super().__init__(signal_queue=signal_queue)
+        self._file_path = Path(file_path)
+        self._column_mapping = column_mapping or {}
         self._existing_emails = existing_emails or set()
+        self._db_conn = db_conn
+        self._project_id = project_id
 
     def _run(self) -> None:
         self._emit(Signal.log(f"Opening {self._file_path.name}..."))

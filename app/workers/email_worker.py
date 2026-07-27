@@ -14,7 +14,9 @@ Supports pause, resume, and stop between emails.
 from __future__ import annotations
 
 import logging
+import queue
 import time
+from typing import Callable, Optional
 
 from app.models.email_queue import EmailQueueItem, QueueItemStatus
 from app.services.email.base import EmailProvider, EmailMessage
@@ -34,22 +36,34 @@ class EmailWorker(BaseWorker):
 
     def __init__(
         self,
-        queue_items: list[EmailQueueItem],
-        provider: EmailProvider,
-        on_sent_callback,          # Callable[[EmailQueueItem], None]
-        on_failed_callback,        # Callable[[EmailQueueItem, str], None]
+        queue_items: list[EmailQueueItem] | None = None,
+        provider: EmailProvider | None = None,
+        email_provider: EmailProvider | None = None,
+        on_sent_callback: Optional[Callable[[EmailQueueItem], None]] = None,
+        on_failed_callback: Optional[Callable[[EmailQueueItem, str], None]] = None,
+        signal_queue: Optional[queue.Queue[Signal]] = None,
+        db_conn=None,
+        project_id: int = 0,
         delay_seconds: int = 5,
         max_retries: int = 3,
     ) -> None:
-        super().__init__()
-        self._queue_items = queue_items
-        self._provider = provider
+        super().__init__(signal_queue=signal_queue)
+        self._queue_items = queue_items or []
+        self._provider = email_provider or provider
         self._on_sent = on_sent_callback
         self._on_failed = on_failed_callback
+        self._db_conn = db_conn
+        self._project_id = project_id
         self._delay = delay_seconds
         self._max_retries = max_retries
 
     def _run(self) -> None:
+        if not self._queue_items and self._db_conn and self._project_id:
+            # Load queue from database if not explicitly passed
+            from app.database.repositories.queue_repo import QueueRepository
+            repo = QueueRepository(self._db_conn)
+            self._queue_items = repo.get_all(self._project_id)
+
         total = len(self._queue_items)
         if total == 0:
             self._emit(Signal.error("Email queue is empty."))
@@ -72,7 +86,8 @@ class EmailWorker(BaseWorker):
             success = self._send_with_retry(item)
             if success:
                 sent += 1
-                self._on_sent(item)
+                if self._on_sent:
+                    self._on_sent(item)
                 self._emit(Signal(
                     type=SignalType.EMAIL_SENT,
                     payload={"to": item.to_email, "name": item.to_name, "position": idx},
@@ -115,18 +130,20 @@ class EmailWorker(BaseWorker):
         for attempt in range(1, self._max_retries + 1):
             if self._should_stop():
                 return False
-            result = self._provider.send(message)
-            if result.success:
+            result = self._provider.send(message) if self._provider else None
+            if result and result.success:
                 return True
+            err = result.error_message if result else "No email provider configured"
             logger.warning(
                 "Attempt %d/%d failed for %s: %s",
-                attempt, self._max_retries, item.to_email, result.error_message,
+                attempt, self._max_retries, item.to_email, err,
             )
             self._emit(Signal.log(
                 f"  Retry {attempt}/{self._max_retries} for {item.to_email}", level="WARNING"
             ))
             if attempt < self._max_retries:
-                time.sleep(5)   # Short pause before retry
+                time.sleep(5)
 
-        self._on_failed(item, result.error_message)
+        if self._on_failed:
+            self._on_failed(item, err)
         return False

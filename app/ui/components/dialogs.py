@@ -29,7 +29,6 @@ class ConfirmDialog(ctk.CTkToplevel):
         super().__init__(parent)
         self.title(title)
         self.resizable(False, False)
-        self.grab_set()
         self.result = False
 
         self._palette = palette
@@ -37,36 +36,57 @@ class ConfirmDialog(ctk.CTkToplevel):
 
         self.configure(fg_color=palette.bg_secondary)
         self._build(title, message, detail, confirm_text, danger)
+        
+        # Center dialog on parent
+        self.update_idletasks()
+        try:
+            px = parent.winfo_rootx() + (parent.winfo_width() // 2) - (self.winfo_width() // 2)
+            py = parent.winfo_rooty() + (parent.winfo_height() // 2) - (self.winfo_height() // 2)
+            self.geometry(f"+{max(0, px)}+{max(0, py)}")
+        except Exception:
+            pass
+
+        self.grab_set()
         self.wait_window()
 
-    def _build(self, title, message, detail, confirm_text, danger) -> None:
-        pad = {"padx": 24, "pady": 8}
+    def _build(self, title: str, message: str, detail: str, confirm_text: str, danger: bool) -> None:
+        ctk.CTkLabel(
+            self, text=title,
+            font=(self._fonts.family, self._fonts.size_lg, "bold"),
+            text_color=self._palette.text_primary
+        ).pack(padx=24, pady=(20, 4))
 
-        ctk.CTkLabel(self, text=title,
-                     font=(self._fonts.family, self._fonts.size_lg, "bold"),
-                     text_color=self._palette.text_primary).pack(**pad, pady=(20, 4))
-
-        ctk.CTkLabel(self, text=message,
-                     font=(self._fonts.family, self._fonts.size_md),
-                     text_color=self._palette.text_primary).pack(**pad)
+        ctk.CTkLabel(
+            self, text=message,
+            font=(self._fonts.family, self._fonts.size_md),
+            text_color=self._palette.text_primary,
+            wraplength=380
+        ).pack(padx=24, pady=8)
 
         if detail:
-            ctk.CTkLabel(self, text=detail,
-                         font=(self._fonts.family, self._fonts.size_sm),
-                         text_color=self._palette.text_secondary).pack(**pad)
+            ctk.CTkLabel(
+                self, text=detail,
+                font=(self._fonts.family, self._fonts.size_sm),
+                text_color=self._palette.text_secondary,
+                wraplength=380
+            ).pack(padx=24, pady=4)
 
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
         btn_frame.pack(padx=24, pady=(12, 20))
 
-        ctk.CTkButton(btn_frame, text="Cancel", width=100,
-                      fg_color="transparent", border_width=1,
-                      text_color=self._palette.text_primary,
-                      command=self._cancel).pack(side="left", padx=4)
+        ctk.CTkButton(
+            btn_frame, text="Cancel", width=100,
+            fg_color="transparent", border_width=1,
+            text_color=self._palette.text_primary,
+            command=self._cancel
+        ).pack(side="left", padx=4)
 
         confirm_color = self._palette.error if danger else self._palette.accent
-        ctk.CTkButton(btn_frame, text=confirm_text, width=100,
-                      fg_color=confirm_color,
-                      command=self._confirm).pack(side="left", padx=4)
+        ctk.CTkButton(
+            btn_frame, text=confirm_text, width=100,
+            fg_color=confirm_color,
+            command=self._confirm
+        ).pack(side="left", padx=4)
 
     def _confirm(self) -> None:
         self.result = True
@@ -85,23 +105,43 @@ class ErrorDialog(ctk.CTkToplevel):
         super().__init__(parent)
         self.title(title)
         self.resizable(False, False)
-        self.grab_set()
         self.configure(fg_color=palette.bg_secondary)
 
-        ctk.CTkLabel(self, text="⚠  " + title,
-                     font=(fonts.family, fonts.size_lg, "bold"),
-                     text_color=palette.error).pack(padx=24, pady=(20, 4))
-        ctk.CTkLabel(self, text=message,
-                     font=(fonts.family, fonts.size_md),
-                     text_color=palette.text_primary,
-                     wraplength=380).pack(padx=24, pady=4)
-        if details:
-            ctk.CTkLabel(self, text=details,
-                         font=(fonts.family, fonts.size_sm),
-                         text_color=palette.text_secondary,
-                         wraplength=380).pack(padx=24, pady=4)
+        ctk.CTkLabel(
+            self, text="⚠  " + title,
+            font=(fonts.family, fonts.size_lg, "bold"),
+            text_color=palette.error
+        ).pack(padx=24, pady=(20, 4))
 
-        ctk.CTkButton(self, text="OK", width=100,
-                      fg_color=palette.accent,
-                      command=self.destroy).pack(pady=(12, 20))
+        ctk.CTkLabel(
+            self, text=message,
+            font=(fonts.family, fonts.size_md),
+            text_color=palette.text_primary,
+            wraplength=380
+        ).pack(padx=24, pady=4)
+
+        if details:
+            ctk.CTkLabel(
+                self, text=details,
+                font=(fonts.family, fonts.size_sm),
+                text_color=palette.text_secondary,
+                wraplength=380
+            ).pack(padx=24, pady=4)
+
+        ctk.CTkButton(
+            self, text="OK", width=100,
+            fg_color=palette.accent,
+            command=self.destroy
+        ).pack(pady=(12, 20))
+
+        # Center dialog on parent
+        self.update_idletasks()
+        try:
+            px = parent.winfo_rootx() + (parent.winfo_width() // 2) - (self.winfo_width() // 2)
+            py = parent.winfo_rooty() + (parent.winfo_height() // 2) - (self.winfo_height() // 2)
+            self.geometry(f"+{max(0, px)}+{max(0, py)}")
+        except Exception:
+            pass
+
+        self.grab_set()
         self.wait_window()
