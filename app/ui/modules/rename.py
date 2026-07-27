@@ -1,15 +1,21 @@
 """
 app.ui.modules.rename
 ======================
-Module view for analyzing certificate PDFs, detecting recipient names,
-editing names manually, rendering PDF previews, and committing copy-renames.
+Standalone module view for analyzing certificate PDFs, detecting recipient names,
+rendering live PDF page previews during sequential processing, displaying ETA,
+and batch copying renamed files to an output directory.
+
+Works 100% standalone — no active project database required!
 """
 
 from __future__ import annotations
 
+import csv
 import logging
-from pathlib import Path, PurePath
+from datetime import datetime
+from pathlib import Path
 import shutil
+import time
 import tkinter as tk
 from tkinter import filedialog as fd
 import customtkinter as ctk
@@ -18,9 +24,10 @@ from app.models.certificate import Certificate, CertificateStatus, ExtractionMet
 from app.ui.components.data_table import DataTable, TAG_SUCCESS, TAG_WARNING, TAG_ERROR, TAG_DISABLED
 from app.ui.components.module_header import ModuleHeader
 from app.ui.components.pdf_viewer import PDFViewer
+from app.ui.components.dialogs import ConfirmDialog
 from app.utils.file_utils import sanitize_filename
 from app.workers.ocr_worker import OCRWorker
-from app.workers.rename_worker import RenameWorker
+from app.workers.rename_worker import RenameWorker, RenameJob
 from app.workers.signals import Signal, SignalType
 
 logger = logging.getLogger(__name__)
@@ -30,8 +37,19 @@ _TABLE_COLS  = ["#", "Original File", "Detected Name", "Confidence", "Method", "
 _TABLE_WIDTHS = [35, 140, 160, 75, 75, 90]
 
 
+def format_seconds(seconds: int) -> str:
+    """Format seconds into MM:SS or HH:MM:SS string."""
+    if seconds < 0:
+        seconds = 0
+    m, s = divmod(seconds, 60)
+    h, m = divmod(m, 60)
+    if h > 0:
+        return f"{h:02d}:{m:02d}:{s:02d}"
+    return f"{m:02d}:{s:02d}"
+
+
 class RenameView:
-    """Module view for analyzing and batch-renaming certificate PDFs."""
+    """Standalone module view for analyzing and batch-renaming certificate PDFs."""
 
     def __init__(self, parent: ctk.CTkFrame, app, palette, fonts) -> None:
         self.frame = ctk.CTkFrame(parent, fg_color=palette.bg_primary, corner_radius=0)
@@ -47,63 +65,96 @@ class RenameView:
         self._ocr_worker: OCRWorker | None = None
         self._rename_worker: RenameWorker | None = None
 
+        # Standalone in-memory dataset
+        self._certificates: list[Certificate] = []
+        self._cert_map: dict[str, Certificate] = {}  # filename -> Certificate
+
         self._build_ui()
 
     def _build_ui(self) -> None:
         p, f = self._palette, self._fonts
 
-        # Header
+        # Header with Reset Session action
         self._header = ModuleHeader(
             self.frame, p, f,
             title="Rename Certificates",
-            subtitle="Scan certificate PDFs, extract participant names via OCR/text parsing, and generate renamed copies.",
+            subtitle="Scan certificate PDFs, extract recipient names via OCR & layout analysis, and generate renamed files.",
             actions=[
-                ("↺  Dry Run",        self._dry_run,        "secondary"),
-                ("✓  Commit Rename",  self._commit_rename,  "primary"),
-                ("★  Mark All Ready", self._mark_all_ready, "secondary"),
+                ("↺  Reset Session",   self._reset_session,  "secondary"),
+                ("↺  Dry Run",         self._dry_run,        "secondary"),
+                ("✓  Commit Rename",   self._commit_rename,  "primary"),
+                ("★  Mark All Ready",  self._mark_all_ready, "secondary"),
             ],
         )
-        self._header.pack(fill="x", padx=24, pady=(20, 12))
+        self._header.pack(fill="x", padx=24, pady=(16, 10))
         self._header.set_button_state("↺  Dry Run", "disabled")
         self._header.set_button_state("✓  Commit Rename", "disabled")
         self._header.set_button_state("★  Mark All Ready", "disabled")
 
-        # Import card
+        # Import Card with Dual Directory Selectors (Source & Output)
         import_card = ctk.CTkFrame(self.frame, fg_color=p.bg_card, corner_radius=10, border_width=1, border_color=p.border)
         import_card.pack(fill="x", padx=24, pady=(0, 8))
 
-        import_row = ctk.CTkFrame(import_card, fg_color="transparent")
-        import_row.pack(fill="x", padx=16, pady=12)
+        # Row 1: Source Directory
+        src_row = ctk.CTkFrame(import_card, fg_color="transparent")
+        src_row.pack(fill="x", padx=16, pady=(10, 4))
 
-        ctk.CTkLabel(import_row, text="Source Directory:", font=(f.family, f.size_sm, "bold"), text_color=p.text_primary).pack(side="left", padx=(0, 8))
-
-        self._folder_var = ctk.StringVar(value="No folder selected")
-        self._folder_entry = ctk.CTkEntry(import_row, textvariable=self._folder_var, font=(f.family, f.size_sm), height=34, fg_color=p.bg_input, border_color=p.border, text_color=p.text_primary)
-        self._folder_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
-
-        self._browse_btn = ctk.CTkButton(
-            import_row, text="Browse...", width=100, height=34,
-            fg_color=p.bg_secondary, hover_color=p.bg_hover, text_color=p.text_primary,
-            command=self._browse_folder,
+        ctk.CTkLabel(src_row, text="Source Directory:", font=(f.family, f.size_sm, "bold"), text_color=p.text_primary, width=130, anchor="w").pack(side="left")
+        self._source_folder_var = ctk.StringVar(value="")
+        self._source_entry = ctk.CTkEntry(
+            src_row, textvariable=self._source_folder_var, font=(f.family, f.size_sm), height=32,
+            fg_color=p.bg_input, border_color=p.border, text_color=p.text_primary,
+            placeholder_text="Select folder containing PDF certificates..."
         )
-        self._browse_btn.pack(side="left", padx=(0, 8))
+        self._source_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+        self._browse_src_btn = ctk.CTkButton(
+            src_row, text="Browse Source...", width=120, height=32,
+            fg_color=p.bg_secondary, hover_color=p.bg_hover, text_color=p.text_primary,
+            command=self._browse_source_folder,
+        )
+        self._browse_src_btn.pack(side="left", padx=(0, 8))
 
         self._analyze_btn = ctk.CTkButton(
-            import_row, text="▶  Analyze Certificates", width=180, height=34, fg_color=p.accent, command=self._start_analysis, state="disabled"
+            src_row, text="▶  Start Analysis", width=160, height=32, fg_color=p.accent,
+            text_color=p.accent_text, command=self._start_analysis, state="disabled"
         )
-        self._analyze_btn.pack(side="left", padx=8)
+        self._analyze_btn.pack(side="left")
 
-        self._file_count_label = ctk.CTkLabel(import_row, text="", font=(f.family, f.size_xs), text_color=p.text_disabled)
+        # Row 2: Output Directory
+        out_row = ctk.CTkFrame(import_card, fg_color="transparent")
+        out_row.pack(fill="x", padx=16, pady=(4, 10))
+
+        ctk.CTkLabel(out_row, text="Output Directory:", font=(f.family, f.size_sm, "bold"), text_color=p.text_primary, width=130, anchor="w").pack(side="left")
+        self._output_folder_var = ctk.StringVar(value="")
+        self._output_entry = ctk.CTkEntry(
+            out_row, textvariable=self._output_folder_var, font=(f.family, f.size_sm), height=32,
+            fg_color=p.bg_input, border_color=p.border, text_color=p.text_primary,
+            placeholder_text="Destination folder for renamed certificates..."
+        )
+        self._output_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+        self._browse_out_btn = ctk.CTkButton(
+            out_row, text="Browse Output...", width=120, height=32,
+            fg_color=p.bg_secondary, hover_color=p.bg_hover, text_color=p.text_primary,
+            command=self._browse_output_folder,
+        )
+        self._browse_out_btn.pack(side="left", padx=(0, 8))
+
+        self._file_count_label = ctk.CTkLabel(out_row, text="", font=(f.family, f.size_xs), text_color=p.text_disabled, width=160, anchor="w")
         self._file_count_label.pack(side="left")
 
-        # Progress bar frame with Pause and Cancel controls
+        # Progress bar frame with Pause/Cancel controls and real-time ETA
         self._progress_frame = ctk.CTkFrame(self.frame, fg_color=p.bg_secondary, corner_radius=8)
         
         prog_top = ctk.CTkFrame(self._progress_frame, fg_color="transparent")
         prog_top.pack(fill="x", padx=16, pady=(8, 2))
         
-        self._progress_label = ctk.CTkLabel(prog_top, text="", font=(f.family, f.size_xs), text_color=p.text_secondary)
+        self._progress_label = ctk.CTkLabel(prog_top, text="", font=(f.family, f.size_xs, "bold"), text_color=p.text_primary)
         self._progress_label.pack(side="left")
+
+        self._eta_label = ctk.CTkLabel(prog_top, text="", font=(f.family, f.size_xs), text_color=p.accent)
+        self._eta_label.pack(side="left", padx=(16, 0))
 
         self._cancel_btn = ctk.CTkButton(
             prog_top, text="⏹ Cancel", width=70, height=22, fg_color=p.error, hover_color=p.error,
@@ -139,10 +190,10 @@ class RenameView:
 
         # Search Entry
         self._search_var = ctk.StringVar()
-        self._search_var.trace_add("write", lambda *_: self.load_certificates_from_db())
+        self._search_var.trace_add("write", lambda *_: self._refresh_table())
         self._search_entry = ctk.CTkEntry(
             tab_frame, placeholder_text="🔍 Search file or name...",
-            textvariable=self._search_var, width=200, height=30,
+            textvariable=self._search_var, width=220, height=30,
             fg_color=p.bg_input, border_color=p.border, font=(f.family, f.size_xs)
         )
         self._search_entry.pack(side="right", padx=(8, 0))
@@ -182,9 +233,9 @@ class RenameView:
         right_frame.grid_columnconfigure(0, weight=1)
 
         # Detail header
-        detail_header = ctk.CTkFrame(right_frame, fg_color="transparent", height=40)
+        detail_header = ctk.CTkFrame(right_frame, fg_color="transparent", height=36)
         detail_header.grid(row=0, column=0, sticky="ew", padx=12, pady=(10, 4))
-        ctk.CTkLabel(detail_header, text="Certificate Inspector", font=(f.family, f.size_sm, "bold"), text_color=p.text_primary).pack(side="left")
+        ctk.CTkLabel(detail_header, text="Certificate Inspector & Live Preview", font=(f.family, f.size_sm, "bold"), text_color=p.text_primary).pack(side="left")
 
         # PDF preview canvas
         preview_frame = ctk.CTkFrame(right_frame, fg_color=p.bg_secondary, corner_radius=6)
@@ -237,52 +288,154 @@ class RenameView:
         # Bottom status bar
         bottom_bar = ctk.CTkFrame(self.frame, fg_color=p.bg_card, height=36, corner_radius=0)
         bottom_bar.pack(fill="x", side="bottom")
-        self._status_label = ctk.CTkLabel(bottom_bar, text="  Ready.", font=(f.family, f.size_xs), text_color=p.text_secondary)
+        self._status_label = ctk.CTkLabel(bottom_bar, text="  Select a source folder containing PDF certificates to begin.", font=(f.family, f.size_xs), text_color=p.text_secondary)
         self._status_label.pack(side="left", padx=16)
         self._summary_label = ctk.CTkLabel(bottom_bar, text="", font=(f.family, f.size_xs, "bold"), text_color=p.text_secondary)
         self._summary_label.pack(side="right", padx=16)
 
-        if self._app.active_project:
+        # Check if project context is loaded (optional enhancement)
+        if hasattr(self._app, "active_project") and self._app.active_project:
             imp_dir = Path(self._app.active_project.project_dir) / "Certificates" / "Imported"
             if imp_dir.exists() and list(imp_dir.glob("*.pdf")):
-                self._folder_var.set(str(imp_dir))
+                self._source_folder_var.set(str(imp_dir))
+                self._output_folder_var.set(str(Path(self._app.active_project.project_dir) / "Renamed Certificates"))
                 count = len(list(imp_dir.glob("*.pdf")))
                 self._file_count_label.configure(text=f"  {count} staged PDF(s)", text_color=p.success)
                 self._analyze_btn.configure(state="normal")
 
-            self.load_certificates_from_db()
-
     # -----------------------------------------------------------------------
-    # Logic & Event Handlers
+    # Directory & Session Controls
     # -----------------------------------------------------------------------
 
-    def load_certificates_from_db(self) -> None:
+    def _browse_source_folder(self) -> None:
+        folder = fd.askdirectory(title="Select Source Folder Containing Certificate PDFs")
+        if not folder:
+            return
+        src_path = Path(folder)
+        self._source_folder_var.set(str(src_path))
+        
+        # Auto-default output folder if empty or using previous auto-path
+        if not self._output_folder_var.get() or "Renamed_Certificates" in self._output_folder_var.get():
+            self._output_folder_var.set(str(src_path / "Renamed_Certificates"))
+
+        pdfs = list(src_path.glob("*.pdf"))
+        count = len(pdfs)
+        self._file_count_label.configure(
+            text=f"  {count} PDF file{'s' if count != 1 else ''} found" if count > 0 else "  No PDF files found",
+            text_color=self._palette.success if count > 0 else self._palette.error,
+        )
+        if count > 0:
+            self._analyze_btn.configure(state="normal")
+        else:
+            self._analyze_btn.configure(state="disabled")
+
+    def _browse_output_folder(self) -> None:
+        folder = fd.askdirectory(title="Select Output Folder for Renamed Certificates")
+        if folder:
+            self._output_folder_var.set(folder)
+
+    def _reset_session(self) -> None:
+        """Reset the session to allow analyzing a new folder cleanly."""
+        self._cancel_worker()
+        self._certificates.clear()
+        self._cert_map.clear()
         self._table.clear()
-        if not self._app.active_project or not self._app.certificate_repo:
+        self._pdf_viewer.clear()
+        self._selected_row = None
+
+        self._source_folder_var.set("")
+        self._output_folder_var.set("")
+        self._file_count_label.configure(text="")
+        self._analyze_btn.configure(state="disabled", text="▶  Start Analysis")
+
+        for lbl in self._detail_rows.values():
+            lbl.configure(text="—")
+        self._edit_name_var.set("")
+
+        self._header.set_button_state("↺  Dry Run", "disabled")
+        self._header.set_button_state("✓  Commit Rename", "disabled")
+        self._header.set_button_state("★  Mark All Ready", "disabled")
+
+        self._progress_frame.pack_forget()
+        self._set_status("Session reset. Select a source folder to start.")
+        self._summary_label.configure(text="")
+
+    # -----------------------------------------------------------------------
+    # Analysis Workflow
+    # -----------------------------------------------------------------------
+
+    def _start_analysis(self) -> None:
+        src_path_str = self._source_folder_var.get().strip()
+        if not src_path_str:
             return
 
-        certs = self._app.certificate_repo.get_all(self._app.active_project.id)
+        source_folder = Path(src_path_str)
+        if not source_folder.exists():
+            self._set_status("Error: Source folder does not exist.")
+            return
 
-        # Deduplicate existing database records if any old duplicates exist
-        seen_filenames: set[str] = set()
-        unique_certs = []
-        duplicate_ids_to_remove = []
-        for c in certs:
-            if c.original_filename in seen_filenames:
-                duplicate_ids_to_remove.append(c.id)
+        out_path_str = self._output_folder_var.get().strip()
+        if not out_path_str:
+            out_path_str = str(source_folder / "Renamed_Certificates")
+            self._output_folder_var.set(out_path_str)
+
+        Path(out_path_str).mkdir(parents=True, exist_ok=True)
+
+        self._certificates.clear()
+        self._cert_map.clear()
+        self._table.clear()
+        self._analysis_running = True
+        self._is_paused = False
+        self._analyzed_count = 0
+
+        self._pause_btn.configure(text="⏸ Pause")
+        self._progress_frame.pack(fill="x", padx=24, pady=(0, 4))
+        self._progress_bar.set(0)
+        self._progress_label.configure(text="Initializing worker...")
+        self._eta_label.configure(text="")
+        self._analyze_btn.configure(state="disabled", text="Analyzing...")
+        self._set_status("Analyzing certificates sequentially...")
+
+        self._ocr_worker = OCRWorker(
+            signal_queue=self._app._signal_queue,
+            pdf_folder=source_folder,
+            db_conn=getattr(self._app, "db", None),
+            project_id=self._app.active_project.id if getattr(self._app, "active_project", None) else 0,
+            ocr_threshold=getattr(self._app.settings, "ocr_confidence_threshold", 70.0),
+        )
+        self._ocr_worker.start()
+
+    def _toggle_pause(self) -> None:
+        active_worker = self._ocr_worker or self._rename_worker
+        if active_worker and active_worker.is_running():
+            if self._is_paused:
+                active_worker.resume()
+                self._is_paused = False
+                self._pause_btn.configure(text="⏸ Pause")
+                self._set_status("Resumed processing.")
             else:
-                seen_filenames.add(c.original_filename)
-                unique_certs.append(c)
+                active_worker.pause()
+                self._is_paused = True
+                self._pause_btn.configure(text="▶ Resume")
+                self._set_status("Paused processing.")
 
-        if duplicate_ids_to_remove and self._app.db:
-            with self._app.db.transaction() as cur:
-                cur.executemany("DELETE FROM certificates WHERE id = ?", [(did,) for did in duplicate_ids_to_remove])
-            certs = unique_certs
+    def _cancel_worker(self) -> None:
+        active_worker = self._ocr_worker or self._rename_worker
+        if active_worker and active_worker.is_running():
+            active_worker.stop()
+            self._set_status("Cancelling background process...")
 
-        ready, review, failed = 0, 0, 0
+    # -----------------------------------------------------------------------
+    # Table Rendering & Category Filtering
+    # -----------------------------------------------------------------------
+
+    def _refresh_table(self) -> None:
+        self._table.clear()
         search_query = self._search_var.get().strip().lower()
 
-        for i, c in enumerate(certs, 1):
+        ready, review, failed = 0, 0, 0
+
+        for i, c in enumerate(self._certificates, start=1):
             if c.status == CertificateStatus.READY:
                 ready += 1
             elif c.status in (CertificateStatus.NEEDS_REVIEW, CertificateStatus.PENDING):
@@ -313,133 +466,90 @@ class RenameView:
                 "Original File": c.original_filename,
                 "Detected Name": c.detected_name or "???",
                 "Confidence": f"{c.confidence:.0f}%",
-                "Method": c.extraction_method.value.upper(),
-                "Status": c.status.value.title().replace("_", " "),
+                "Method": c.extraction_method.value.upper() if hasattr(c.extraction_method, "value") else str(c.extraction_method).upper(),
+                "Status": c.status.value.title().replace("_", " ") if hasattr(c.status, "value") else str(c.status).title().replace("_", " "),
             }, tag=tag)
 
-        if certs:
+        if self._certificates:
             self._header.set_button_state("↺  Dry Run", "normal")
             self._header.set_button_state("✓  Commit Rename", "normal")
             self._header.set_button_state("★  Mark All Ready", "normal")
             self._update_summary(ready, review, failed)
 
-    def _browse_folder(self) -> None:
-        folder = fd.askdirectory(title="Select Folder Containing Certificate PDFs")
-        if not folder:
-            return
-        self._folder_var.set(folder)
-        pdfs = list(Path(folder).glob("*.pdf"))
-        count = len(pdfs)
-        self._file_count_label.configure(
-            text=f"  {count} PDF file{'s' if count != 1 else ''} found" if count > 0 else "  No PDF files found",
-            text_color=self._palette.success if count > 0 else self._palette.error,
-        )
-        if count > 0:
-            self._analyze_btn.configure(state="normal")
+    def _set_filter(self, tab: str) -> None:
+        self._active_filter = tab
+        for name, btn in self._tab_buttons.items():
+            active = (name == tab)
+            btn.configure(
+                fg_color=self._palette.accent if active else self._palette.bg_secondary,
+                text_color=self._palette.accent_text if active else self._palette.text_secondary
+            )
+        self._refresh_table()
 
-    def _start_analysis(self) -> None:
-        if not self._app.active_project or not self._app.db:
-            return
-
-        source_folder = Path(self._folder_var.get())
-        if not source_folder.exists():
-            return
-
-        # Workspace Import Staging: Copy raw source PDFs into <Project>/Certificates/Imported/
-        imported_dir = Path(self._app.active_project.project_dir) / "Certificates" / "Imported"
-        imported_dir.mkdir(parents=True, exist_ok=True)
-
-        if source_folder.resolve() != imported_dir.resolve():
-            self._set_status("Staging source certificates into project workspace...")
-            for pdf_file in source_folder.glob("*.pdf"):
-                dest_file = imported_dir / pdf_file.name
-                if not dest_file.exists() or dest_file.stat().st_size != pdf_file.stat().st_size:
-                    shutil.copy2(str(pdf_file), str(dest_file))
-            analysis_folder = imported_dir
-        else:
-            analysis_folder = source_folder
-
-        self._table.clear()
-        self._analysis_running = True
-        self._is_paused = False
-        self._analyzed_count = 0
-        self._pause_btn.configure(text="⏸ Pause")
-        self._progress_frame.pack(fill="x", padx=24, pady=(0, 4))
-        self._progress_bar.set(0)
-        self._analyze_btn.configure(state="disabled", text="Analyzing...")
-        self._set_status("Analyzing certificates...")
-
-        self._ocr_worker = OCRWorker(
-            signal_queue=self._app._signal_queue,
-            pdf_folder=analysis_folder,
-            db_conn=self._app.db,
-            project_id=self._app.active_project.id,
-            ocr_threshold=self._app.settings.ocr_confidence_threshold,
-        )
-        self._ocr_worker.start()
-
-    def _toggle_pause(self) -> None:
-        active_worker = self._ocr_worker or self._rename_worker
-        if active_worker and active_worker.is_alive():
-            if self._is_paused:
-                active_worker.resume()
-                self._is_paused = False
-                self._pause_btn.configure(text="⏸ Pause")
-                self._set_status("Resumed background worker processing.")
-            else:
-                active_worker.pause()
-                self._is_paused = True
-                self._pause_btn.configure(text="▶ Resume")
-                self._set_status("Paused background worker processing.")
-
-    def _cancel_worker(self) -> None:
-        active_worker = self._ocr_worker or self._rename_worker
-        if active_worker and active_worker.is_alive():
-            active_worker.stop()
-            self._set_status("Worker thread cancellation requested...")
+    # -----------------------------------------------------------------------
+    # Commit Rename & Dry Run
+    # -----------------------------------------------------------------------
 
     def _commit_rename(self) -> None:
-        if not self._app.active_project or not self._app.db:
+        src_dir_str = self._source_folder_var.get().strip()
+        out_dir_str = self._output_folder_var.get().strip()
+        if not src_dir_str or not out_dir_str:
+            self._set_status("Please select valid Source and Output directories.")
             return
 
-        from app.ui.components.dialogs import ConfirmDialog
+        source_dir = Path(src_dir_str)
+        dest_dir = Path(out_dir_str)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+
+        ready_certs = [c for c in self._certificates if c.detected_name and c.status in (CertificateStatus.READY, CertificateStatus.NEEDS_REVIEW)]
+        if not ready_certs:
+            self._set_status("No certificates ready to rename.")
+            return
+
         dialog = ConfirmDialog(
             self.frame.winfo_toplevel(), self._palette, self._fonts,
             title="Confirm Rename",
-            message="Rename and copy all Ready certificates to the Renamed folder?",
-            confirm_text="Rename Copies", danger=False,
+            message=f"Copy and rename {len(ready_certs)} certificate(s) to the output directory?\n\nDestination: {dest_dir.name}",
+            confirm_text="Rename Files", danger=False,
         )
-        if dialog.result:
-            self._set_status("Renaming certificates...")
-            source_dir = Path(self._app.active_project.project_dir) / "Certificates" / "Imported"
-            if not source_dir.exists() or not list(source_dir.glob("*.pdf")):
-                source_dir = Path(self._folder_var.get())
-
-            # Use the correct project constant folder name for renamed output
-            dest_dir = Path(self._app.active_project.project_dir) / "Renamed Certificates"
-
-            self._is_paused = False
-            self._pause_btn.configure(text="⏸ Pause")
-            self._progress_frame.pack(fill="x", padx=24, pady=(0, 4))
-            self._progress_bar.set(0)
-
-            self._rename_worker = RenameWorker(
-                signal_queue=self._app._signal_queue,
-                db_conn=self._app.db,
-                project_id=self._app.active_project.id,
-                source_dir=source_dir,
-                dest_dir=dest_dir,
-                project_dir=Path(self._app.active_project.project_dir),
-            )
-            self._rename_worker.start()
-
-    def _dry_run(self) -> None:
-        if not self._app.active_project or not self._app.certificate_repo:
-            self._set_status("No active project loaded.")
+        if not dialog.result:
             return
 
-        certs = self._app.certificate_repo.get_all(self._app.active_project.id)
-        ready_certs = [c for c in certs if c.detected_name and c.status in (CertificateStatus.READY, CertificateStatus.NEEDS_REVIEW)]
+        self._set_status("Renaming certificates...")
+        self._is_paused = False
+        self._pause_btn.configure(text="⏸ Pause")
+        self._progress_frame.pack(fill="x", padx=24, pady=(0, 4))
+        self._progress_bar.set(0)
+
+        # Build RenameJobs
+        jobs = []
+        used_dest_paths: set[Path] = set()
+        for c in ready_certs:
+            src = source_dir / c.original_filename
+            if not src.exists() and c.original_file_path:
+                src = Path(c.original_file_path)
+            clean_name = sanitize_filename(c.detected_name)
+            dst = dest_dir / f"{clean_name}.pdf"
+            counter = 1
+            while dst in used_dest_paths or dst.exists():
+                dst = dest_dir / f"{clean_name} ({counter}).pdf"
+                counter += 1
+            used_dest_paths.add(dst)
+            jobs.append(RenameJob(cert_id=c.id, source_path=src, destination_path=dst))
+
+        self._rename_worker = RenameWorker(
+            jobs=jobs,
+            signal_queue=self._app._signal_queue,
+            db_conn=getattr(self._app, "db", None),
+            project_id=self._app.active_project.id if getattr(self._app, "active_project", None) else 0,
+            source_dir=source_dir,
+            dest_dir=dest_dir,
+            project_dir=dest_dir,
+        )
+        self._rename_worker.start()
+
+    def _dry_run(self) -> None:
+        ready_certs = [c for c in self._certificates if c.detected_name and c.status in (CertificateStatus.READY, CertificateStatus.NEEDS_REVIEW)]
 
         if not ready_certs:
             self._set_status("Dry run: No certificates ready to rename.")
@@ -458,11 +568,10 @@ class RenameView:
             lines.append(f"... and {len(ready_certs) - 12} more certificate(s)")
 
         preview_msg = "\n".join(lines)
-        from app.ui.components.dialogs import ConfirmDialog
         ConfirmDialog(
             self.frame.winfo_toplevel(), self._palette, self._fonts,
             title="Dry Run Simulation Preview",
-            message=f"Simulating rename for {len(ready_certs)} certificate(s) (originals are NOT modified):",
+            message=f"Simulating rename for {len(ready_certs)} certificate(s) (originals will NOT be modified):",
             detail=preview_msg,
             confirm_text="Close Preview",
             danger=False,
@@ -470,37 +579,32 @@ class RenameView:
         self._set_status(f"Dry run complete: {len(ready_certs)} file(s) ready to rename.")
 
     def _mark_all_ready(self) -> None:
-        if not self._app.active_project or not self._app.certificate_repo:
-            return
-        certs = self._app.certificate_repo.get_all(self._app.active_project.id)
         count = 0
-        for c in certs:
+        for c in self._certificates:
             if c.detected_name and c.status != CertificateStatus.READY:
                 c.status = CertificateStatus.READY
-                self._app.certificate_repo.update(c)
                 count += 1
-        self.load_certificates_from_db()
+        self._refresh_table()
         self._set_status(f"Marked {count} certificate(s) as Ready.")
 
     def _mark_selected_ready(self) -> None:
-        if not self._selected_row or not self._app.certificate_repo or not self._app.active_project:
+        if not self._selected_row:
             return
         filename = self._selected_row.get("Original File")
-        cert = self._app.certificate_repo.get_by_filename(self._app.active_project.id, filename)
+        cert = self._cert_map.get(filename)
         if cert:
             cert.status = CertificateStatus.READY
-            self._app.certificate_repo.update(cert)
-            self.load_certificates_from_db()
+            self._refresh_table()
             self._set_status(f"Marked '{filename}' as Ready.")
 
     def _save_manual_name(self) -> None:
-        if not self._selected_row or not self._app.certificate_repo or not self._app.active_project:
+        if not self._selected_row:
             return
         new_name = self._edit_name_var.get().strip()
         if not new_name:
             return
         filename = self._selected_row.get("Original File")
-        cert = self._app.certificate_repo.get_by_filename(self._app.active_project.id, filename)
+        cert = self._cert_map.get(filename)
         if cert:
             if not cert.original_detected_name:
                 cert.original_detected_name = cert.detected_name
@@ -508,43 +612,35 @@ class RenameView:
             cert.manually_corrected = True
             cert.status = CertificateStatus.READY
             cert.extraction_method = ExtractionMethod.MANUAL
-            self._app.certificate_repo.update(cert)
-            self.load_certificates_from_db()
+            self._refresh_table()
             self._set_status(f"Updated name for '{filename}' to '{new_name}'.")
 
     def _ignore_selected(self) -> None:
-        if not self._selected_row or not self._app.certificate_repo or not self._app.active_project:
+        if not self._selected_row:
             return
         filename = self._selected_row.get("Original File")
-        cert = self._app.certificate_repo.get_by_filename(self._app.active_project.id, filename)
+        cert = self._cert_map.get(filename)
         if cert:
             cert.status = CertificateStatus.IGNORED
             cert.is_ignored = True
-            self._app.certificate_repo.update(cert)
-            self.load_certificates_from_db()
+            self._refresh_table()
             self._set_status(f"Ignored '{filename}'.")
 
     def _remove_selected(self) -> None:
-        if not self._selected_row or not self._app.certificate_repo or not self._app.active_project:
+        if not self._selected_row:
             return
         filename = self._selected_row.get("Original File")
-        cert = self._app.certificate_repo.get_by_filename(self._app.active_project.id, filename)
-        if cert and self._app.db:
-            with self._app.db.transaction() as cur:
-                cur.execute("DELETE FROM certificates WHERE id = ?", (cert.id,))
-            self.load_certificates_from_db()
+        if filename in self._cert_map:
+            cert = self._cert_map.pop(filename)
+            if cert in self._certificates:
+                self._certificates.remove(cert)
+            self._refresh_table()
             self._set_status(f"Removed '{filename}' from list.")
-
-    def _set_filter(self, tab: str) -> None:
-        self._active_filter = tab
-        for name, btn in self._tab_buttons.items():
-            active = (name == tab)
-            btn.configure(fg_color=self._palette.accent if active else self._palette.bg_secondary, text_color=self._palette.accent_text if active else self._palette.text_secondary)
-        self.load_certificates_from_db()
 
     def _on_row_select(self, row_id: str, values: dict) -> None:
         self._selected_row = values
-        self._detail_rows["File"].configure(text=values.get("Original File", "—"))
+        filename = values.get("Original File", "")
+        self._detail_rows["File"].configure(text=filename or "—")
         self._detail_rows["Detected Name"].configure(text=values.get("Detected Name", "—"))
         self._detail_rows["Method"].configure(text=values.get("Method", "—"))
         self._detail_rows["Confidence"].configure(text=values.get("Confidence", "—"))
@@ -552,11 +648,9 @@ class RenameView:
         self._detail_rows["New Filename"].configure(text=f"{sanitize_filename(name)}.pdf" if name else "—")
         self._edit_name_var.set(name)
 
-        folder = self._folder_var.get()
-        if folder and folder != "No folder selected":
-            pdf_path = Path(folder) / values.get("Original File", "")
-            if not pdf_path.exists() and self._app.active_project:
-                pdf_path = Path(self._app.active_project.project_dir) / "Certificates" / "Imported" / values.get("Original File", "")
+        folder = self._source_folder_var.get()
+        if folder:
+            pdf_path = Path(folder) / filename
             if pdf_path.exists():
                 self._pdf_viewer.load(pdf_path)
 
@@ -572,16 +666,81 @@ class RenameView:
     def _update_summary(self, ready: int, review: int, failed: int) -> None:
         self._summary_label.configure(text=f"✓ {ready} Ready   ⚠ {review} Review   ✗ {failed} Failed")
 
+    # -----------------------------------------------------------------------
+    # Worker Signal Listener (Live PDF Preview & ETA Updates)
+    # -----------------------------------------------------------------------
+
     def on_signal(self, signal: Signal) -> None:
         if signal.type == SignalType.PROGRESS_UPDATE:
             curr = signal.payload.get("current", 0)
             tot  = signal.payload.get("total", 1)
             msg  = signal.payload.get("message", "")
+            elapsed = signal.payload.get("elapsed_sec", 0)
+            eta = signal.payload.get("eta_sec", 0)
+
             self._progress_bar.set(curr / max(tot, 1))
             self._progress_label.configure(text=msg)
+            
+            if tot > 0:
+                self._eta_label.configure(text=f"⏱ Elapsed: {format_seconds(elapsed)}  |  Est. Remaining: {format_seconds(eta)}")
+
             self._set_status(msg)
-        elif signal.type in (SignalType.CERTIFICATE_ANALYZED, SignalType.CERTIFICATE_RENAMED):
+
+        elif signal.type == SignalType.CERTIFICATE_ANALYZED:
             self._analyzed_count += 1
+            payload = signal.payload
+            filename = payload.get("filename", "")
+            file_path = payload.get("file", "")
+            detected_name = payload.get("detected_name", "")
+            confidence = payload.get("confidence", 0.0)
+            method_str = payload.get("method", "failed")
+
+            # Determine CertificateStatus
+            status = CertificateStatus.READY if (confidence >= 50.0 and detected_name) else CertificateStatus.NEEDS_REVIEW
+            if method_str == "encrypted":
+                status = CertificateStatus.ENCRYPTED_PDF
+            elif method_str == "corrupt":
+                status = CertificateStatus.CORRUPTED_FILE
+            elif method_str == "failed":
+                status = CertificateStatus.FAILED
+
+            method_enum = ExtractionMethod.TEXT if method_str in ("text", "font_size", "keyword", "layout") else \
+                          ExtractionMethod.OCR if method_str == "ocr" else ExtractionMethod.FAILED
+
+            cert = Certificate(
+                id=self._analyzed_count,
+                project_id=0,
+                original_filename=filename,
+                original_file_path=file_path,
+                detected_name=detected_name,
+                confidence=confidence,
+                extraction_method=method_enum,
+                status=status,
+            )
+
+            if filename not in self._cert_map:
+                self._certificates.append(cert)
+                self._cert_map[filename] = cert
+            else:
+                # Update existing record
+                old_cert = self._cert_map[filename]
+                idx = self._certificates.index(old_cert)
+                self._certificates[idx] = cert
+                self._cert_map[filename] = cert
+
+            self._refresh_table()
+
+            # LIVE PREVIEW UPDATE: Load currently analyzed PDF into viewer automatically
+            if file_path and Path(file_path).exists():
+                self._pdf_viewer.load(Path(file_path))
+
+        elif signal.type == SignalType.CERTIFICATE_RENAMED:
+            cert_id = signal.payload.get("cert_id")
+            for c in self._certificates:
+                if c.id == cert_id:
+                    c.status = CertificateStatus.RENAMED
+            self._refresh_table()
+
         elif signal.type == SignalType.PROGRESS_COMPLETE:
             self._analysis_running = False
             self._progress_frame.pack_forget()
@@ -591,9 +750,10 @@ class RenameView:
             self._header.set_button_state("★  Mark All Ready", "normal")
             self._progress_bar.set(1.0)
             self._set_status(signal.payload.get("message", "Processing complete."))
-            self.load_certificates_from_db()
+            self._refresh_table()
+
         elif signal.type == SignalType.PROGRESS_ERROR:
             self._analysis_running = False
             self._progress_frame.pack_forget()
             self._set_status(f"Error: {signal.payload.get('message', '')}")
-            self._analyze_btn.configure(state="normal", text="▶  Analyze Certificates")
+            self._analyze_btn.configure(state="normal", text="▶  Start Analysis")

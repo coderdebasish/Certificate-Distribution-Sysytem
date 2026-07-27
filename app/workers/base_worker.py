@@ -67,6 +67,10 @@ class BaseWorker(ABC):
     def is_running(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
 
+    def is_alive(self) -> bool:
+        """Alias for is_running() to match Python Thread API."""
+        return self.is_running()
+
     def is_paused(self) -> bool:
         return not self._pause_event.is_set()
 
