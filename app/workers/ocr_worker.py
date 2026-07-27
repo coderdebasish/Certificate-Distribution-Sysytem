@@ -66,6 +66,11 @@ class OCRWorker(BaseWorker):
 
         self._emit(Signal.log(f"Starting analysis of {total} certificate(s)..."))
 
+        repo = None
+        if self._db_conn and self._project_id:
+            from app.database.repositories.certificate_repo import CertificateRepository
+            repo = CertificateRepository(self._db_conn)
+
         for idx, pdf_path in enumerate(pdfs, start=1):
             if self._should_stop():
                 self._emit(Signal(type=SignalType.WORKER_STOPPED))
@@ -77,6 +82,37 @@ class OCRWorker(BaseWorker):
 
             try:
                 result = self._analyze_pdf(pdf_path)
+                
+                if repo and self._project_id:
+                    from app.models.certificate import Certificate, CertificateStatus, ExtractionMethod
+                    status = CertificateStatus.READY if (result.confidence >= 50.0 and result.detected_name) else CertificateStatus.NEEDS_REVIEW
+                    if result.method == "failed":
+                        status = CertificateStatus.FAILED
+                    
+                    method_enum = ExtractionMethod.TEXT if result.method == "text" else \
+                                  ExtractionMethod.OCR if result.method == "ocr" else ExtractionMethod.FAILED
+                    
+                    existing = repo.get_by_filename(self._project_id, pdf_path.name)
+                    if existing:
+                        existing.detected_name = result.detected_name
+                        existing.confidence = result.confidence
+                        existing.extraction_method = method_enum
+                        existing.raw_extracted_text = result.raw_text_used
+                        existing.status = status
+                        repo.update(existing)
+                    else:
+                        cert = Certificate(
+                            project_id=self._project_id,
+                            original_filename=pdf_path.name,
+                            original_file_path=str(pdf_path),
+                            detected_name=result.detected_name,
+                            confidence=result.confidence,
+                            extraction_method=method_enum,
+                            raw_extracted_text=result.raw_text_used,
+                            status=status,
+                        )
+                        repo.insert(cert)
+
                 self._emit(Signal(
                     type=SignalType.CERTIFICATE_ANALYZED,
                     payload={
@@ -111,13 +147,17 @@ class OCRWorker(BaseWorker):
         raw_text = self._extract_text_pymupdf(pdf_path)
         if raw_text.strip():
             self._emit(Signal.log(f"  Text extraction successful for {pdf_path.name}"))
-            return self._name_detector.detect(raw_text)
+            res = self._name_detector.detect(raw_text)
+            res.method = "text"
+            return res
 
         # Stage 2: OCR
         if self._ocr_engine.is_available():
             self._emit(Signal.log(f"  No text found — running OCR on {pdf_path.name}"))
             ocr_result = self._ocr_engine.extract_text_from_pdf_page(pdf_path, 0)
-            return self._name_detector.detect(ocr_result.text)
+            res = self._name_detector.detect(ocr_result.text)
+            res.method = "ocr"
+            return res
 
         # Stage 3: Nothing worked
         return NameDetectionResult(method="failed", confidence=0.0)

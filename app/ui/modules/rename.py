@@ -55,12 +55,14 @@ class RenameView:
             actions=[
                 ("✓  Commit Rename", self._commit_rename, "primary"),
                 ("↺  Dry Run",       self._dry_run,       "secondary"),
+                ("★  Mark All Ready", self._mark_all_ready, "secondary"),
             ],
         )
         header.pack(fill="x", padx=24, pady=(20, 8))
         self._header = header
         header.set_button_state("✓  Commit Rename", "disabled")
         header.set_button_state("↺  Dry Run", "disabled")
+        header.set_button_state("★  Mark All Ready", "disabled")
 
         # Folder strip
         import_strip = ctk.CTkFrame(self.frame, fg_color=p.bg_secondary, corner_radius=10)
@@ -127,10 +129,11 @@ class RenameView:
             on_select=self._on_row_select,
             on_double_click=self._on_row_double_click,
             context_menu=[
-                ("✏  Edit Name",     self._edit_selected),
-                ("👁  Ignore",        self._ignore_selected),
+                ("✓  Mark as Ready",  self._mark_selected_ready),
+                ("✏  Edit Name",      self._edit_selected),
+                ("👁  Ignore",         self._ignore_selected),
                 ("---", None),
-                ("🗑  Remove Row",    self._remove_selected),
+                ("🗑  Remove Row",     self._remove_selected),
             ],
         )
         self._table.pack(fill="both", expand=True)
@@ -204,18 +207,29 @@ class RenameView:
                   TAG_WARNING if c.status == CertificateStatus.NEEDS_REVIEW else \
                   TAG_ERROR if c.status == CertificateStatus.FAILED else TAG_DISABLED
 
+            if self._active_filter != "All":
+                if self._active_filter == "Ready" and c.status != CertificateStatus.READY:
+                    continue
+                if self._active_filter == "Needs Review" and c.status != CertificateStatus.NEEDS_REVIEW:
+                    continue
+                if self._active_filter == "Failed" and c.status != CertificateStatus.FAILED:
+                    continue
+                if self._active_filter == "Ignored" and c.status != CertificateStatus.IGNORED:
+                    continue
+
             self._table.add_row({
                 "#": str(i),
                 "Original File": c.original_filename,
                 "Detected Name": c.detected_name or "???",
                 "Confidence": f"{c.confidence:.0f}%",
                 "Method": c.extraction_method.value.upper(),
-                "Status": c.status.value.title(),
+                "Status": c.status.value.title().replace("_", " "),
             }, tag=tag)
 
         if certs:
             self._header.set_button_state("↺  Dry Run", "normal")
             self._header.set_button_state("✓  Commit Rename", "normal")
+            self._header.set_button_state("★  Mark All Ready", "normal")
             self._update_summary(ready, review, failed)
 
     # -----------------------------------------------------------------------
@@ -288,13 +302,69 @@ class RenameView:
             self._rename_worker.start()
 
     def _dry_run(self) -> None:
-        self._set_status("Dry run: rename preview — originals NOT modified.")
+        if not self._app.active_project or not self._app.certificate_repo:
+            self._set_status("No active project loaded.")
+            return
+
+        certs = self._app.certificate_repo.get_all(self._app.active_project.id)
+        ready_certs = [c for c in certs if c.detected_name and c.status in (CertificateStatus.READY, CertificateStatus.NEEDS_REVIEW)]
+
+        if not ready_certs:
+            self._set_status("Dry run: No certificates ready to rename.")
+            return
+
+        lines = [f"{c.original_filename}  ➔  {c.detected_name}.pdf" for c in ready_certs[:12]]
+        if len(ready_certs) > 12:
+            lines.append(f"... and {len(ready_certs) - 12} more certificate(s)")
+
+        preview_msg = "\n".join(lines)
+        from app.ui.components.dialogs import ConfirmDialog
+        ConfirmDialog(
+            self.frame.winfo_toplevel(), self._palette, self._fonts,
+            title="Dry Run Simulation Preview",
+            message=f"Simulating rename for {len(ready_certs)} certificate(s) (originals are NOT modified):",
+            detail=preview_msg,
+            confirm_text="Close Preview",
+            danger=False,
+        )
+        self._set_status(f"Dry run complete: {len(ready_certs)} file(s) ready to rename.")
+
+    def _mark_all_ready(self) -> None:
+        if not self._app.active_project or not self._app.certificate_repo:
+            return
+        certs = self._app.certificate_repo.get_all(self._app.active_project.id)
+        count = 0
+        for c in certs:
+            if c.detected_name and c.status != CertificateStatus.READY:
+                c.status = CertificateStatus.READY
+                self._app.certificate_repo.update(c)
+                count += 1
+        self.load_certificates_from_db()
+        self._set_status(f"Marked {count} certificate(s) as Ready.")
+
+    def _mark_selected_ready(self) -> None:
+        sel = self._table.get_selected()
+        if sel:
+            row_id = self._table._tree.selection()[0]
+            updated = dict(sel[0])
+            updated["Status"] = "Ready"
+            self._table.update_row(row_id, updated, tag=TAG_SUCCESS)
+            if self._app.active_project and self._app.certificate_repo:
+                filename = updated.get("Original File")
+                certs = self._app.certificate_repo.get_all(self._app.active_project.id)
+                for c in certs:
+                    if c.original_filename == filename:
+                        c.status = CertificateStatus.READY
+                        self._app.certificate_repo.update(c)
+                        break
+            self._set_status(f"Marked '{updated.get('Original File')}' as Ready.")
 
     def _set_filter(self, tab: str) -> None:
         self._active_filter = tab
         for name, btn in self._tab_buttons.items():
             active = (name == tab)
             btn.configure(fg_color=self._palette.accent if active else self._palette.bg_secondary, text_color=self._palette.accent_text if active else self._palette.text_secondary)
+        self.load_certificates_from_db()
 
     def _on_row_select(self, row_id: str, values: dict) -> None:
         self._selected_row = values
@@ -330,6 +400,18 @@ class RenameView:
                 updated["Status"] = "Ready"
                 self._table.update_row(row_id, updated, tag=TAG_SUCCESS)
                 self._detail_rows["Detected Name"].configure(text=new_name)
+
+                if self._app.active_project and self._app.certificate_repo:
+                    filename = updated.get("Original File")
+                    certs = self._app.certificate_repo.get_all(self._app.active_project.id)
+                    for c in certs:
+                        if c.original_filename == filename:
+                            c.detected_name = new_name
+                            c.status = CertificateStatus.READY
+                            c.manually_corrected = True
+                            self._app.certificate_repo.update(c)
+                            break
+
                 self._set_status(f"Name corrected to '{new_name}'.")
 
     def _ignore_selected(self) -> None:
@@ -339,6 +421,15 @@ class RenameView:
             updated = dict(sel[0])
             updated["Status"] = "Ignored"
             self._table.update_row(row_id, updated, tag=TAG_DISABLED)
+            if self._app.active_project and self._app.certificate_repo:
+                filename = updated.get("Original File")
+                certs = self._app.certificate_repo.get_all(self._app.active_project.id)
+                for c in certs:
+                    if c.original_filename == filename:
+                        c.status = CertificateStatus.IGNORED
+                        c.is_ignored = True
+                        self._app.certificate_repo.update(c)
+                        break
 
     def _remove_selected(self) -> None:
         sel = self._table._tree.selection()
@@ -358,11 +449,15 @@ class RenameView:
             msg  = signal.payload.get("message", "")
             self._progress_bar.set(curr / max(tot, 1))
             self._progress_label.configure(text=msg)
+            self._set_status(msg)
+        elif signal.type in (SignalType.CERTIFICATE_ANALYZED, SignalType.CERTIFICATE_RENAMED):
+            self._analyzed_count += 1
         elif signal.type == SignalType.PROGRESS_COMPLETE:
             self._analysis_running = False
             self._analyze_btn.configure(state="normal", text="▶  Re-analyze")
             self._header.set_button_state("↺  Dry Run", "normal")
             self._header.set_button_state("✓  Commit Rename", "normal")
+            self._header.set_button_state("★  Mark All Ready", "normal")
             self._progress_bar.set(1.0)
             self._set_status(signal.payload.get("message", "Processing complete."))
             self.load_certificates_from_db()

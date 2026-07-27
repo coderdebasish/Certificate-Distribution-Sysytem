@@ -25,6 +25,7 @@ class CertificateStatus(str, Enum):
     PENDING = "pending"         # Imported, not yet analyzed
     ANALYZING = "analyzing"     # OCR/text extraction in progress
     READY = "ready"             # Name detected, ready for rename
+    NEEDS_REVIEW = "needs_review" # Name detected with low confidence or manual review needed
     RENAMED = "renamed"         # Renamed copy exists
     IGNORED = "ignored"         # User marked as ignore (cover page, etc.)
     FAILED = "failed"           # Analysis or rename failed

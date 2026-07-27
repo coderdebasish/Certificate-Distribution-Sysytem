@@ -3,9 +3,8 @@ app.ui.components.pdf_viewer
 ==============================
 Inline PDF preview panel using PyMuPDF (fitz).
 
-Renders a PDF page to a PIL Image, displays it in a CTkLabel,
+Renders a PDF page to a PIL CTkImage, displays it in a CTkLabel,
 and supports zoom in/out, fit-to-width, fit-to-page, and mouse-wheel zoom.
-Falls back gracefully if PyMuPDF is not installed.
 """
 
 from __future__ import annotations
@@ -20,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 try:
     import fitz           # PyMuPDF
-    from PIL import Image, ImageTk
+    from PIL import Image
     _PYMUPDF_AVAILABLE = True
 except ImportError:
     _PYMUPDF_AVAILABLE = False
@@ -39,7 +38,7 @@ class PDFViewer(ctk.CTkFrame):
     """
 
     MIN_ZOOM = 0.3
-    MAX_ZOOM = 4.0
+    MAX_ZOOM = 3.0
     ZOOM_STEP = 0.15
 
     def __init__(self, parent, palette: ColorPalette, fonts: FontSystem) -> None:
@@ -51,7 +50,7 @@ class PDFViewer(ctk.CTkFrame):
         self._page_number = 0
         self._total_pages = 0
         self._zoom = 1.0
-        self._photo: object = None   # Keep reference to avoid GC
+        self._ctk_img: ctk.CTkImage | None = None
 
         self._build()
 
@@ -128,8 +127,7 @@ class PDFViewer(ctk.CTkFrame):
             self._pdf_path = pdf_path
             self._total_pages = len(self._doc)
             self._page_number = max(0, min(page, self._total_pages - 1))
-            self._zoom = 1.0
-            self._render()
+            self._fit_page()
         except Exception as exc:
             logger.error("PDF load failed: %s", exc)
             self._show_error(f"Cannot open PDF:\n{exc}")
@@ -164,17 +162,24 @@ class PDFViewer(ctk.CTkFrame):
             return
         page = self._doc[self._page_number]
         rect = page.rect
-        w = self._canvas_frame.winfo_width() or 400
-        h = self._canvas_frame.winfo_height() or 500
-        self._zoom = min(w / rect.width, h / rect.height) * 0.9
+        self.update_idletasks()
+        cw = self._canvas_frame.winfo_width()
+        ch = self._canvas_frame.winfo_height()
+        w = cw if cw > 100 else 420
+        h = ch if ch > 100 else 280
+        scale_w = (w - 30) / rect.width
+        scale_h = (h - 30) / rect.height
+        self._zoom = max(0.2, min(scale_w, scale_h))
         self._render()
 
     def _fit_width(self) -> None:
         if not self._doc:
             return
         page = self._doc[self._page_number]
-        w = self._canvas_frame.winfo_width() or 400
-        self._zoom = (w / page.rect.width) * 0.9
+        self.update_idletasks()
+        cw = self._canvas_frame.winfo_width()
+        w = cw if cw > 100 else 420
+        self._zoom = max(0.2, (w - 30) / page.rect.width)
         self._render()
 
     def _prev_page(self) -> None:
@@ -201,20 +206,23 @@ class PDFViewer(ctk.CTkFrame):
         if not self._doc or not _PYMUPDF_AVAILABLE:
             return
         page = self._doc[self._page_number]
-        mat = fitz.Matrix(self._zoom * 1.5, self._zoom * 1.5)  # HiDPI
+        mat = fitz.Matrix(2.0, 2.0)  # Render crisp high-DPI image
         pix = page.get_pixmap(matrix=mat, alpha=False)
         img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
 
-        self._photo = ImageTk.PhotoImage(img)
+        disp_w = max(50, int(page.rect.width * self._zoom))
+        disp_h = max(50, int(page.rect.height * self._zoom))
+
+        self._ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=(disp_w, disp_h))
 
         # Hide placeholder
         self._placeholder.pack_forget()
 
         if self._img_label:
-            self._img_label.configure(image=self._photo)
+            self._img_label.configure(image=self._ctk_img)
         else:
             self._img_label = ctk.CTkLabel(
-                self._canvas_frame, image=self._photo, text=""
+                self._canvas_frame, image=self._ctk_img, text=""
             )
             self._img_label.pack(expand=True, pady=8)
 

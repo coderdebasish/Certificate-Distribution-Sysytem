@@ -130,9 +130,10 @@ class NameDetector:
             return None
         candidates.sort(key=lambda x: x[1], reverse=True)
         name = self._clean_name(candidates[0][0])
+        score = self._score_name(name, method="layout")
         return NameDetectionResult(
             detected_name=name,
-            confidence=60.0,
+            confidence=score,
             method="layout",
             raw_text_used=candidates[0][0],
         )

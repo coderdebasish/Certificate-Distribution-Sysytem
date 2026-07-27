@@ -54,6 +54,14 @@ class CertificateRepository:
             ).fetchone()
         return self._from_row(row) if row else None
 
+    def get_by_filename(self, project_id: int, filename: str) -> Optional[Certificate]:
+        with self._db.read() as cur:
+            row = cur.execute(
+                "SELECT * FROM certificates WHERE project_id = ? AND original_filename = ?",
+                (project_id, filename),
+            ).fetchone()
+        return self._from_row(row) if row else None
+
     def get_all(self, project_id: int) -> list[Certificate]:
         with self._db.read() as cur:
             rows = cur.execute(
@@ -101,6 +109,10 @@ class CertificateRepository:
                 """,
                 self._to_dict(cert),
             )
+
+    def delete_by_project(self, project_id: int) -> None:
+        with self._db.transaction() as cur:
+            cur.execute("DELETE FROM certificates WHERE project_id = ?", (project_id,))
 
     def count(self, project_id: int) -> int:
         with self._db.read() as cur:
