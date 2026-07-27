@@ -143,7 +143,9 @@ class SettingsView:
             provider.configure(email_addr, app_pass)
             res = provider.test_connection()
             if res.success:
-                self._test_status.configure(text="✓ SMTP Connection Successful", text_color=self._palette.success)
+                self._app.settings.encrypted_credentials = encrypt_credentials(email_addr, app_pass)
+                self._app.settings.save()
+                self._test_status.configure(text="✓ SMTP Connection Successful & Saved!", text_color=self._palette.success)
             else:
                 self._test_status.configure(text=f"✗ {res.error_message}", text_color=self._palette.error)
         except Exception as exc:

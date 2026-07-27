@@ -243,9 +243,12 @@ class SendingView:
             self._append_log("No active project loaded.")
             return
 
+        # Reload latest settings from file
+        self._app.settings.load()
+
         creds = decrypt_credentials(self._app.settings.encrypted_credentials)
         if not creds or not creds.get("email") or not creds.get("password"):
-            self._append_log("❌ SMTP credentials missing. Go to Settings and configure your Gmail address & App Password.")
+            self._append_log("❌ SMTP credentials missing. Go to Settings and click 'Save Settings' or 'Test Connection'.")
             return
 
         items = self._app.queue_repo.get_all(self._app.active_project.id)
