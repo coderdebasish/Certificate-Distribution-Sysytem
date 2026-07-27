@@ -50,24 +50,42 @@ class QueueBuilder:
         errors: list[str] = []
 
         for position, p in enumerate(participants, start=1):
-            cert = cert_map.get(p.certificate_id)
+            if not p.email or "@" not in p.email:
+                errors.append(f"{p.full_name}: Invalid email address ({p.email or 'missing'}).")
+                continue
 
-            # Validation
-            if not cert:
-                errors.append(f"{p.full_name}: No certificate assigned.")
-                continue
-            if not Path(cert.renamed_file_path).exists():
-                errors.append(f"{p.full_name}: Certificate file not found: {cert.renamed_file_path}")
-                continue
-            if "@" not in p.email:
-                errors.append(f"{p.full_name}: Invalid email: {p.email}")
+            cert = cert_map.get(p.certificate_id)
+            cert_id = cert.id if cert else 0
+            cert_name = (cert.renamed_filename or cert.original_filename) if cert else f"{p.full_name}.pdf"
+            cert_path = (cert.renamed_file_path or cert.original_file_path) if cert else ""
+
+            # Fallback path search if cert_path does not exist
+            if not cert_path or not Path(cert_path).exists():
+                proj_dir = Path(project.project_dir)
+                possible_paths = [
+                    proj_dir / "Renamed_Certificates" / cert_name,
+                    proj_dir / "Renamed Certificates" / cert_name,
+                    proj_dir / "Renamed_Certificates" / f"{p.full_name}.pdf",
+                    proj_dir / "Renamed Certificates" / f"{p.full_name}.pdf",
+                    proj_dir.parent / "Renamed_Certificates" / cert_name,
+                    proj_dir.parent / "Renamed Certificates" / cert_name,
+                    proj_dir.parent / "Renamed_Certificates" / f"{p.full_name}.pdf",
+                    proj_dir.parent / "Renamed Certificates" / f"{p.full_name}.pdf",
+                ]
+                for candidate in possible_paths:
+                    if candidate.exists():
+                        cert_path = str(candidate)
+                        break
+
+            if not cert_path or not Path(cert_path).exists():
+                errors.append(f"{p.full_name}: Certificate file not found for email attachment.")
                 continue
 
             # Render placeholders
             context = self._engine.build_context(
                 name=p.full_name,
                 email=p.email,
-                certificate_filename=cert.renamed_filename,
+                certificate_filename=cert_name,
                 event_name=project.event_name,
                 project_name=project.name,
                 college=p.college,
@@ -79,23 +97,18 @@ class QueueBuilder:
                 body_html=template.body_html,
                 context=context,
             )
-            if not result.is_valid:
-                errors.append(
-                    f"{p.full_name}: Unknown placeholders: {result.unknown_placeholders}"
-                )
-                continue
 
             items.append(EmailQueueItem(
                 project_id=project.id,
                 queue_position=position,
                 participant_id=p.id,
-                certificate_id=cert.id,
+                certificate_id=cert_id,
                 template_id=template.id,
                 to_email=p.email,
                 to_name=p.full_name,
                 subject=result.subject,
                 body_html=result.body_html,
-                attachment_path=cert.renamed_file_path,
+                attachment_path=cert_path,
             ))
 
         return items, errors

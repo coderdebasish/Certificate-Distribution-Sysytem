@@ -313,7 +313,6 @@ class TemplatesView:
         if self._current_template:
             self._current_template.subject = subj
             self._current_template.body_html = body
-            self._current_template.body_text = body
             self._app.template_repo.update(self._current_template)
         else:
             tmpl = Template(
@@ -321,7 +320,6 @@ class TemplatesView:
                 name="Default Email Template",
                 subject=subj,
                 body_html=body,
-                body_text=body,
             )
             self._current_template = self._app.template_repo.insert(tmpl)
 

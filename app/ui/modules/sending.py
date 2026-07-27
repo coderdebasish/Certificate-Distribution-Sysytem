@@ -1,6 +1,6 @@
 """
 app.ui.modules.sending
-=======================
+======================
 Email Sending Module — Rate-Limited Gmail Dispatcher with live stream logs,
 ETA progress tracking, and CSV audit report generation.
 """
@@ -13,7 +13,8 @@ from datetime import datetime
 from pathlib import Path
 import customtkinter as ctk
 
-from app.models.email_queue import QueueStatus
+from app.models.email_queue import QueueStatus, EmailQueueItem
+from app.models.email_template import EmailTemplate
 from app.services.email.gmail_provider import GmailProvider
 from app.services.email.queue_manager import QueueBuilder
 from app.ui.theme import ColorPalette, FontSystem
@@ -140,10 +141,10 @@ class SendingView:
         self._log_box = ctk.CTkTextbox(log_panel, state="disabled", fg_color=p.bg_input, text_color=p.text_primary, font=(f.family, f.size_xs), wrap="word")
         self._log_box.pack(fill="both", expand=True, padx=14, pady=(0, 14))
 
-        self._append_log("System initialized. Open a project to begin distribution.")
+        self._append_log("System initialized.")
 
     # -----------------------------------------------------------------------
-    # DB Integration
+    # DB Integration & Queue Auto-Building
     # -----------------------------------------------------------------------
 
     def on_project_loaded(self, project) -> None:
@@ -155,8 +156,32 @@ class SendingView:
             return
 
         items = self._app.queue_repo.get_all(self._app.active_project.id)
-        sent, failed, pending = 0, 0, 0
 
+        # Auto-generate queue if currently empty
+        if not items and self._app.participant_repo:
+            participants = self._app.participant_repo.get_all(self._app.active_project.id)
+            if participants:
+                certs = {c.id: c for c in self._app.certificate_repo.get_all(self._app.active_project.id)} if self._app.certificate_repo else {}
+                templates = self._app.template_repo.get_all(self._app.active_project.id) if self._app.template_repo else []
+                active_tmpl = templates[0] if templates else EmailTemplate(
+                    project_id=self._app.active_project.id,
+                    name="Default",
+                    subject="Certificate of Participation for {name} - {event_name}",
+                    body_html="Dear {name},<br><br>Please find your certificate attached.<br><br>Best regards,<br>{college}"
+                )
+
+                builder = QueueBuilder()
+                new_items, errors = builder.build(self._app.active_project, participants, certs, active_tmpl)
+                for item in new_items:
+                    self._app.queue_repo.insert(item)
+
+                if errors:
+                    for err in errors[:5]:
+                        self._append_log(f"⚠️ {err}")
+
+                items = self._app.queue_repo.get_all(self._app.active_project.id)
+
+        sent, failed, pending = 0, 0, 0
         for item in items:
             if item.status == QueueStatus.SENT:
                 sent += 1
@@ -169,7 +194,7 @@ class SendingView:
                 tag = TAG_DISABLED
 
             p = self._app.participant_repo.get_by_id(item.participant_id) if self._app.participant_repo else None
-            p_name = p.full_name if p else f"PID#{item.participant_id}"
+            p_name = p.full_name if p else item.to_name or f"PID#{item.participant_id}"
 
             self._queue_table.add_row({
                 "Pos": str(item.queue_position),
@@ -194,31 +219,18 @@ class SendingView:
 
         creds = decrypt_credentials(self._app.settings.encrypted_credentials)
         if not creds or not creds.get("email") or not creds.get("password"):
-            self._append_log("SMTP credentials missing. Configure Gmail App Password in Settings.")
+            self._append_log("❌ SMTP credentials missing. Go to Settings and configure your Gmail address & App Password.")
             return
 
         items = self._app.queue_repo.get_all(self._app.active_project.id)
         if not items:
-            self._append_log("Generating email queue from matched participants...")
-            participants = self._app.participant_repo.get_all(self._app.active_project.id)
-            certs = {c.id: c for c in self._app.certificate_repo.get_all(self._app.active_project.id)} if self._app.certificate_repo else {}
-            templates = self._app.template_repo.get_all(self._app.active_project.id) if self._app.template_repo else []
-
-            if templates and participants:
-                builder = QueueBuilder()
-                new_items, errors = builder.build(self._app.active_project, participants, certs, templates[0])
-                for item in new_items:
-                    self._app.queue_repo.insert(item)
-                for err in errors:
-                    self._append_log(f"Warning: {err}")
-                self.load_queue_from_db()
-                items = self._app.queue_repo.get_all(self._app.active_project.id)
+            self.load_queue_from_db()
+            items = self._app.queue_repo.get_all(self._app.active_project.id)
 
         if not items:
-            self._append_log("No participants ready in email queue.")
+            self._append_log("No participants available in distribution queue.")
             return
 
-        # Parse delays
         delay_sec = int(self._delay_var.get().split()[0])
         batch_str = self._batch_size_var.get()
         batch_size = 0
@@ -240,98 +252,90 @@ class SendingView:
             email_provider=provider,
             delay_seconds=delay_sec,
             batch_size=batch_size,
-            batch_pause_seconds=60,
         )
         self._email_worker.start()
 
         self._header.set_button_state("▶  Start Sending", "disabled")
         self._header.set_button_state("⏸  Pause", "normal")
         self._header.set_button_state("⏹  Stop", "normal")
-        self._prog_status_lbl.configure(text="Dispatching emails...")
-        self._append_log(f"Started email worker thread (Delay: {delay_sec}s, Batch: {batch_str})...")
+        self._prog_status_lbl.configure(text="Dispatching certificates via Gmail SMTP...")
+        self._append_log("🚀 Distribution pipeline started.")
 
     def _pause_sending(self) -> None:
         if self._email_worker:
-            if self._email_worker.is_paused:
-                self._email_worker.resume()
-                self._header._action_buttons["⏸  Pause"].configure(text="⏸  Pause")
-                self._prog_status_lbl.configure(text="Resuming sending...")
+            if self._email_worker.is_paused():
+                self._email_worker.resume_worker()
+                self._header.set_button_text("⏸  Pause", "⏸  Pause")
+                self._append_log("▶ Distribution resumed.")
             else:
-                self._email_worker.pause()
-                self._header._action_buttons["⏸  Pause"].configure(text="▶  Resume")
-                self._prog_status_lbl.configure(text="Dispatch paused.")
+                self._email_worker.pause_worker()
+                self._header.set_button_text("⏸  Pause", "▶  Resume")
+                self._append_log("⏸ Distribution paused.")
 
     def _stop_sending(self) -> None:
         if self._email_worker:
-            self._email_worker.stop()
-            self._email_worker = None
-
-        self._header.set_button_state("▶  Start Sending", "normal")
-        self._header.set_button_state("⏸  Pause", "disabled")
-        self._header.set_button_state("⏹  Stop", "disabled")
-        self._prog_status_lbl.configure(text="Dispatch stopped.")
-        self._append_log("Email dispatch stopped by user.")
+            self._email_worker.stop_worker()
+            self._header.set_button_state("▶  Start Sending", "normal")
+            self._header.set_button_state("⏸  Pause", "disabled")
+            self._header.set_button_state("⏹  Stop", "disabled")
+            self._prog_status_lbl.configure(text="Distribution stopped by user.")
+            self._append_log("⏹ Distribution stopped.")
 
     def _retry_item(self) -> None:
-        self._append_log("Retrying selected item...")
-
-    def _generate_csv_report(self) -> None:
-        if not self._app.active_project or not self._app.queue_repo:
+        sel = self._queue_table._tree.selection()
+        if not sel or not self._app.active_project or not self._app.queue_repo:
             return
-
-        reports_dir = Path(self._app.active_project.project_dir) / "Reports"
-        reports_dir.mkdir(parents=True, exist_ok=True)
-        filename = f"Email_Delivery_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-        report_path = reports_dir / filename
-
-        items = self._app.queue_repo.get_all(self._app.active_project.id)
-        with open(report_path, mode="w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow(["Position", "Participant ID", "Recipient Email", "Status", "Attempts", "Attachment Path", "Last Error"])
+        for iid in sel:
+            vals = dict(zip(_QUEUE_COLS, self._queue_table._tree.item(iid, "values")))
+            pos = int(vals["Pos"])
+            items = self._app.queue_repo.get_all(self._app.active_project.id)
             for item in items:
-                writer.writerow([item.queue_position, item.participant_id, item.to_email, item.status.value, item.attempts, item.attachment_path, item.last_error or ""])
-
-        self._append_log(f"📄 Delivery Audit Report generated: {filename}")
-
-    def _append_log(self, text: str) -> None:
-        self._log_box.configure(state="normal")
-        self._log_box.insert("end", f"• {text}\n")
-        self._log_box.see("end")
-        self._log_box.configure(state="disabled")
+                if item.queue_position == pos:
+                    item.status = QueueStatus.PENDING
+                    self._app.queue_repo.update(item)
+                    break
+        self.load_queue_from_db()
+        self._append_log("Queued item reset for retry.")
 
     def _clear_log(self) -> None:
         self._log_box.configure(state="normal")
         self._log_box.delete("1.0", "end")
         self._log_box.configure(state="disabled")
 
+    def _append_log(self, text: str) -> None:
+        ts = datetime.now().strftime("%H:%M:%S")
+        self._log_box.configure(state="normal")
+        self._log_box.insert("end", f"[{ts}] {text}\n")
+        self._log_box.see("end")
+        self._log_box.configure(state="disabled")
+
+    # -----------------------------------------------------------------------
+    # Signal Handling
+    # -----------------------------------------------------------------------
+
     def on_signal(self, signal: Signal) -> None:
-        if signal.type == SignalType.LOG_MESSAGE:
-            self._append_log(signal.payload.get("message", ""))
-        elif signal.type == SignalType.PROGRESS_UPDATE:
+        if signal.type == SignalType.WORKER_PROGRESS:
             curr = signal.payload.get("current", 0)
             tot = signal.payload.get("total", 1)
-            pct = curr / max(tot, 1)
-            self._progress_bar.set(pct)
+            frac = curr / max(tot, 1)
+            self._progress_bar.set(frac)
 
-            # Calculate ETA
             elapsed = time.time() - self._start_time
-            if curr > 0 and tot > curr:
-                avg_per_item = elapsed / curr
-                rem_sec = int(avg_per_item * (tot - curr))
-                m, s = divmod(rem_sec, 60)
-                self._eta_lbl.configure(text=f"ETA: {m:02d}m {s:02d}s")
-            else:
-                self._eta_lbl.configure(text="ETA: —")
+            if curr > 0:
+                avg = elapsed / curr
+                rem = (tot - curr) * avg
+                m, s = divmod(int(rem), 60)
+                self._eta_lbl.configure(text=f"ETA: {m}m {s}s")
 
+        elif signal.type == SignalType.WORKER_LOG:
+            msg = signal.payload.get("message", "")
+            self._append_log(msg)
+
+        elif signal.type in (SignalType.EMAIL_SENT, SignalType.EMAIL_FAILED, SignalType.EMAIL_QUEUE_COMPLETE, SignalType.WORKER_COMPLETED):
             self.load_queue_from_db()
-        elif signal.type == SignalType.EMAIL_SENT:
-            self.load_queue_from_db()
-        elif signal.type == SignalType.EMAIL_FAILED:
-            self.load_queue_from_db()
-        elif signal.type in (SignalType.EMAIL_QUEUE_COMPLETE, SignalType.WORKER_COMPLETED):
-            self._header.set_button_state("▶  Start Sending", "normal")
-            self._header.set_button_state("⏸  Pause", "disabled")
-            self._header.set_button_state("⏹  Stop", "disabled")
-            self._prog_status_lbl.configure(text="All emails processed!")
-            self._eta_lbl.configure(text="ETA: Done")
-            self._generate_csv_report()
+            if signal.type in (SignalType.EMAIL_QUEUE_COMPLETE, SignalType.WORKER_COMPLETED):
+                self._header.set_button_state("▶  Start Sending", "normal")
+                self._header.set_button_state("⏸  Pause", "disabled")
+                self._header.set_button_state("⏹  Stop", "disabled")
+                self._prog_status_lbl.configure(text="Distribution completed successfully!")
+                self._eta_lbl.configure(text="ETA: Completed")
