@@ -137,7 +137,8 @@ class ParticipantsView:
         matched, sent, failed = 0, 0, 0
 
         for p in participants:
-            if p.match_status == MatchStatus.MATCHED:
+            status_val = p.match_status.value if hasattr(p.match_status, "value") else str(p.match_status)
+            if status_val in ("matched", "auto_matched", "manual"):
                 matched += 1
             if p.email_status == EmailStatus.SENT:
                 sent += 1
@@ -146,14 +147,14 @@ class ParticipantsView:
 
             tag = TAG_SUCCESS if p.email_status == EmailStatus.SENT else \
                   TAG_ERROR if p.email_status == EmailStatus.FAILED or not p.email else \
-                  TAG_WARNING if p.match_status == MatchStatus.UNMATCHED else ""
+                  TAG_WARNING if status_val in ("not_assigned", "unmatched", "missing") else ""
 
             self._table.add_row({
                 "ID": f"PID{p.id:06d}",
                 "Full Name": p.full_name,
                 "Email": p.email or "(missing)",
                 "College": p.college or "—",
-                "Match": p.match_status.value.title(),
+                "Match": status_val.replace("_", " ").title(),
                 "Email Status": p.email_status.value.title(),
             }, tag=tag)
 
@@ -293,8 +294,9 @@ class ParticipantsView:
                     "College": row.college, "Match": "Unmatched", "Email Status": "Pending",
                 }, tag=TAG_WARNING)
         elif signal.type == SignalType.IMPORT_COMPLETE:
+            valid = signal.payload.get("valid", 0)
             total = signal.payload.get("total", 0)
-            self._import_status.configure(text=f"✓ Imported {total} participants")
+            self._import_status.configure(text=f"✓ Imported {valid} of {total} participants")
             self.load_participants_from_db()
 
 

@@ -15,6 +15,7 @@ from tkinter import filedialog as fd
 import customtkinter as ctk
 
 from app.models.participant import MatchStatus, Participant
+from app.models.certificate import Certificate
 from app.services.matching.matcher import NameMatcher, MatchConfidence
 from app.ui.theme import ColorPalette, FontSystem
 from app.ui.components.module_header import ModuleHeader
@@ -36,7 +37,7 @@ class MatchingView:
         self._fonts = fonts
         self._matcher = NameMatcher()
         self._cert_dir: Path | None = None
-        self._cert_files: dict[str, Path] = {}  # stem/filename -> Path
+        self._cert_files: dict[str, Path] = {}  # filename/stem -> Path
         self._selected_row: dict | None = None
 
         self.frame = ctk.CTkFrame(parent, fg_color=palette.bg_primary)
@@ -165,7 +166,16 @@ class MatchingView:
     # -----------------------------------------------------------------------
 
     def on_project_loaded(self, project) -> None:
-        renamed_dir = Path(project.project_dir) / "Renamed Certificates"
+        renamed_dir = Path(project.project_dir) / "Renamed_Certificates"
+        if not renamed_dir.exists():
+            renamed_dir = Path(project.project_dir) / "Renamed Certificates"
+        if not renamed_dir.exists():
+            p_parent = Path(project.project_dir).parent
+            if (p_parent / "Renamed_Certificates").exists():
+                renamed_dir = p_parent / "Renamed_Certificates"
+            elif (p_parent / "Renamed Certificates").exists():
+                renamed_dir = p_parent / "Renamed Certificates"
+
         if renamed_dir.exists():
             self._load_cert_folder(renamed_dir)
         self.load_matches_from_db()
@@ -181,12 +191,30 @@ class MatchingView:
         self._folder_var.set(str(path))
         self._cert_files.clear()
 
-        if path.exists():
-            for p in path.glob("*.pdf"):
-                self._cert_files[p.name] = p
-                self._cert_files[p.stem] = p
+        pdf_paths = sorted(list(path.glob("*.pdf")))
+        if not pdf_paths:
+            pdf_paths = sorted(list(path.rglob("*.pdf")))
 
-        cert_list = sorted(list({p.name for p in self._cert_files.values()}))
+        for p in pdf_paths:
+            self._cert_files[p.name] = p
+            self._cert_files[p.stem] = p
+
+        # Sync certificates with database if active project exists
+        if self._app.active_project and self._app.certificate_repo:
+            existing_certs = {c.original_filename: c for c in self._app.certificate_repo.get_all(self._app.active_project.id)}
+            for p in pdf_paths:
+                if p.name not in existing_certs and p.stem not in existing_certs:
+                    cert_obj = Certificate(
+                        project_id=self._app.active_project.id,
+                        original_filename=p.name,
+                        original_file_path=str(p),
+                        renamed_filename=p.name,
+                        renamed_file_path=str(p),
+                        detected_name=p.stem,
+                    )
+                    self._app.certificate_repo.insert(cert_obj)
+
+        cert_list = sorted(list({p.name for p in pdf_paths}))
         self._cert_dropdown.configure(values=["— Select certificate —"] + cert_list)
         self._stat_cards["Available"].set_value(str(len(cert_list)))
 
@@ -197,16 +225,23 @@ class MatchingView:
 
         participants = self._app.participant_repo.get_all(self._app.active_project.id)
         certs = self._app.certificate_repo.get_all(self._app.active_project.id) if self._app.certificate_repo else []
-        cert_dict = {c.id: c.renamed_filename or c.original_filename for c in certs}
+
+        cert_dict: dict[int, str] = {}
+        for c in certs:
+            val = c.renamed_filename or c.original_filename or c.detected_name
+            if val:
+                cert_dict[c.id] = val
 
         matched, unmatched, low_conf = 0, 0, 0
         for p in participants:
-            cert_name = cert_dict.get(p.certificate_id, "—")
-            if p.match_status == MatchStatus.MATCHED:
+            cert_name = cert_dict.get(p.certificate_id, "") if p.certificate_id > 0 else ""
+            status_val = p.match_status.value if hasattr(p.match_status, "value") else str(p.match_status)
+
+            if p.certificate_id > 0 and status_val in ("matched", "auto_matched", "manual"):
                 matched += 1
                 status = "Matched"
                 tag = TAG_SUCCESS
-            elif p.match_status == MatchStatus.LOW_CONFIDENCE:
+            elif p.certificate_id > 0 and status_val in ("low_confidence", "missing"):
                 low_conf += 1
                 status = "Low Conf."
                 tag = TAG_WARNING
@@ -214,13 +249,14 @@ class MatchingView:
                 unmatched += 1
                 status = "Unmatched"
                 tag = TAG_ERROR
+                cert_name = "—"
 
             self._match_table.add_row({
                 "Participant": p.full_name,
                 "Email": p.email or "—",
-                "Assigned Certificate": cert_name,
-                "Confidence": f"{p.match_confidence:.0f}%" if p.match_confidence > 0 else "—",
-                "Method": "Fuzzy" if p.match_confidence > 0 else "—",
+                "Assigned Certificate": cert_name if cert_name else "—",
+                "Confidence": f"{p.match_confidence:.0f}%" if p.certificate_id > 0 and p.match_confidence > 0 else "—",
+                "Method": ("Exact" if p.match_confidence >= 100 else "Fuzzy") if p.certificate_id > 0 else "—",
                 "Status": status,
             }, tag=tag)
 
@@ -240,51 +276,70 @@ class MatchingView:
         if not participants:
             return
 
-        # Prepare names map
-        p_names = {p.id: p.full_name for p in participants}
+        if self._cert_dir:
+            self._load_cert_folder(self._cert_dir)
 
-        c_names = {}
-        if self._cert_files:
-            c_names = {idx: stem for idx, (stem, path) in enumerate(self._cert_files.items(), 1) if path.suffix == ".pdf"}
-        elif self._app.certificate_repo:
-            certs = self._app.certificate_repo.get_all(self._app.active_project.id)
-            c_names = {c.id: Path(c.renamed_filename or c.original_filename).stem for c in certs}
+        certs = self._app.certificate_repo.get_all(self._app.active_project.id) if self._app.certificate_repo else []
 
-        if not c_names:
+        if not certs and not self._cert_files:
             self._app.statusbar.set_status("No certificate PDFs available to match.")
             return
 
+        p_names = {p.id: p.full_name for p in participants}
+
+        if certs:
+            c_names = {c.id: Path(c.renamed_filename or c.original_filename or c.detected_name).stem for c in certs}
+        else:
+            c_names = {idx: stem for idx, (stem, path) in enumerate(self._cert_files.items(), 1) if path.suffix == ".pdf"}
+
         results = self._matcher.match_all(p_names, c_names)
 
-        # Update participants in DB
+        matched_count = 0
         for r in results:
             p = self._app.participant_repo.get_by_id(r.participant_id)
-            if p and r.certificate_id > 0:
-                p.certificate_id = r.certificate_id
-                p.match_confidence = r.score
-                p.match_status = MatchStatus.MATCHED if r.confidence in [MatchConfidence.EXACT, MatchConfidence.HIGH] else MatchStatus.LOW_CONFIDENCE
+            if p:
+                if r.certificate_id > 0 and r.score >= 75.0:
+                    matched_count += 1
+                    p.certificate_id = r.certificate_id
+                    p.match_confidence = r.score
+                    p.match_status = MatchStatus.MATCHED if r.confidence in [MatchConfidence.EXACT, MatchConfidence.HIGH] else MatchStatus.LOW_CONFIDENCE
+                else:
+                    p.certificate_id = 0
+                    p.match_confidence = 0.0
+                    p.match_status = MatchStatus.NOT_ASSIGNED
                 self._app.participant_repo.update(p)
 
         self.load_matches_from_db()
-        self._app.statusbar.set_status(f"Auto-matched {len(results)} participant(s).")
+        self._app.statusbar.set_status(f"Auto-matched {matched_count} participant(s).")
 
     def _save_matches(self) -> None:
-        self._app.statusbar.set_status("Certificate assignments saved.")
+        self._app.statusbar.set_status("Certificate assignments saved successfully.")
 
     def _on_row_select(self, row_id: str, values: dict) -> None:
         self._selected_row = values
-        self._detail_fields["Participant"].configure(text=values.get("Participant", "—"))
-        self._detail_fields["Assigned Cert"].configure(text=values.get("Assigned Certificate", "—"))
+        p_name = values.get("Participant", "—")
+        cert_filename = values.get("Assigned Certificate", "")
+
+        self._detail_fields["Participant"].configure(text=p_name)
+        self._detail_fields["Assigned Cert"].configure(text=cert_filename if cert_filename else "—")
         self._detail_fields["Confidence"].configure(text=values.get("Confidence", "—"))
 
-        cert_filename = values.get("Assigned Certificate", "")
+        pdf_path = None
+
         if cert_filename and cert_filename != "—":
             if cert_filename in self._cert_files:
-                self._pdf_viewer.load(self._cert_files[cert_filename])
+                pdf_path = self._cert_files[cert_filename]
+            elif f"{cert_filename}.pdf" in self._cert_files:
+                pdf_path = self._cert_files[f"{cert_filename}.pdf"]
             elif self._cert_dir:
-                pdf_p = self._cert_dir / cert_filename
-                if pdf_p.exists():
-                    self._pdf_viewer.load(pdf_p)
+                p = self._cert_dir / cert_filename
+                if p.exists():
+                    pdf_path = p
+                elif (self._cert_dir / f"{cert_filename}.pdf").exists():
+                    pdf_path = self._cert_dir / f"{cert_filename}.pdf"
+
+        if pdf_path and pdf_path.exists():
+            self._pdf_viewer.load(pdf_path)
         else:
             self._pdf_viewer.clear()
 
@@ -301,6 +356,17 @@ class MatchingView:
             return
 
         sel = self._match_table._tree.selection()
+        if not sel:
+            return
+
+        cert_id = 0
+        if self._app.active_project and self._app.certificate_repo:
+            certs = self._app.certificate_repo.get_all(self._app.active_project.id)
+            for c in certs:
+                if (c.renamed_filename or c.original_filename) == cert_name or Path(c.renamed_filename or c.original_filename).stem == Path(cert_name).stem:
+                    cert_id = c.id
+                    break
+
         for iid in sel:
             vals = dict(zip(_MATCH_COLS, self._match_table._tree.item(iid, "values")))
             vals["Assigned Certificate"] = cert_name
@@ -309,18 +375,43 @@ class MatchingView:
             vals["Status"] = "Matched"
             self._match_table.update_row(iid, vals, tag=TAG_SUCCESS)
 
+            # Save to DB
+            p_name = vals["Participant"]
+            if self._app.active_project and self._app.participant_repo:
+                participants = self._app.participant_repo.get_all(self._app.active_project.id)
+                for p in participants:
+                    if p.full_name == p_name:
+                        p.certificate_id = cert_id
+                        p.match_confidence = 100.0
+                        p.match_status = MatchStatus.MANUAL
+                        self._app.participant_repo.update(p)
+
         if cert_name in self._cert_files:
             self._pdf_viewer.load(self._cert_files[cert_name])
 
     def _clear_match(self) -> None:
         sel = self._match_table._tree.selection()
+        if not sel:
+            return
+
         for iid in sel:
             vals = dict(zip(_MATCH_COLS, self._match_table._tree.item(iid, "values")))
+            p_name = vals["Participant"]
             vals["Assigned Certificate"] = "—"
             vals["Confidence"] = "—"
             vals["Method"] = "—"
             vals["Status"] = "Unmatched"
             self._match_table.update_row(iid, vals, tag=TAG_ERROR)
+
+            if self._app.active_project and self._app.participant_repo:
+                participants = self._app.participant_repo.get_all(self._app.active_project.id)
+                for p in participants:
+                    if p.full_name == p_name:
+                        p.certificate_id = 0
+                        p.match_confidence = 0.0
+                        p.match_status = MatchStatus.NOT_ASSIGNED
+                        self._app.participant_repo.update(p)
+
         self._pdf_viewer.clear()
 
     def on_signal(self, signal: Signal) -> None:

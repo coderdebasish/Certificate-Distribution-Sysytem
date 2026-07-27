@@ -233,10 +233,29 @@ class TemplatesView:
         self._body_preview.configure(state="disabled")
 
         # Load attached PDF if exists on disk
-        if self._app.active_project:
-            pdf_path = Path(self._app.active_project.project_dir) / "Renamed Certificates" / cert_filename
-            if pdf_path.exists():
-                self._pdf_viewer.load(pdf_path)
+        pdf_path = None
+        if self._selected_participant and self._app.certificate_repo and self._selected_participant.certificate_id > 0:
+            cert_obj = self._app.certificate_repo.get_by_id(self._selected_participant.certificate_id)
+            if cert_obj and cert_obj.renamed_file_path and Path(cert_obj.renamed_file_path).exists():
+                pdf_path = Path(cert_obj.renamed_file_path)
+
+        if not pdf_path and self._app.active_project:
+            proj_dir = Path(self._app.active_project.project_dir)
+            possible_paths = [
+                proj_dir / "Renamed_Certificates" / cert_filename,
+                proj_dir / "Renamed Certificates" / cert_filename,
+                proj_dir.parent / "Renamed_Certificates" / cert_filename,
+                proj_dir.parent / "Renamed Certificates" / cert_filename,
+            ]
+            for candidate in possible_paths:
+                if candidate.exists():
+                    pdf_path = candidate
+                    break
+
+        if pdf_path and pdf_path.exists():
+            self._pdf_viewer.load(pdf_path)
+        else:
+            self._pdf_viewer.clear()
 
     def _save_template(self) -> None:
         if not self._app.active_project or not self._app.template_repo:

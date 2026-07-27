@@ -137,26 +137,54 @@ class ImportWorker(BaseWorker):
         ext = self._file_path.suffix.lower()
         if ext == ".csv":
             import csv
+            data = []
             with open(self._file_path, mode="r", encoding="utf-8-sig", errors="replace") as f:
-                reader = csv.DictReader(f)
-                return [dict(row) for row in reader]
+                reader = csv.reader(f)
+                try:
+                    headers = [str(h).strip() for h in next(reader)]
+                except StopIteration:
+                    return []
+                for row in reader:
+                    if not row or not any(row):
+                        continue
+                    row_dict = {headers[i]: (str(row[i]).strip() if i < len(row) and row[i] is not None else "") for i in range(len(headers))}
+                    data.append(row_dict)
+            return data
         else:
             import openpyxl
             wb = openpyxl.load_workbook(str(self._file_path), read_only=True, data_only=True)
             ws = wb.active
             rows_iter = ws.iter_rows(values_only=True)
-            headers = [str(h).strip() if h else "" for h in next(rows_iter)]
+            try:
+                headers = [str(h).strip() if h else "" for h in next(rows_iter)]
+            except StopIteration:
+                wb.close()
+                return []
             data = []
             for row in rows_iter:
-                row_dict = {headers[i]: (cell or "") for i, cell in enumerate(row) if i < len(headers)}
+                if not row or not any(row):
+                    continue
+                row_dict = {headers[i]: (str(cell).strip() if i < len(row) and cell is not None else "") for i, cell in enumerate(row) if i < len(headers)}
                 data.append(row_dict)
             wb.close()
             return data
 
     def _validate_row(self, row_number: int, raw_row: dict[str, Any]) -> ImportRow:
         def get(field: str) -> str:
-            excel_col = self._column_mapping.get(field, field)
-            return str(raw_row.get(excel_col, "") or "").strip()
+            target_col = self._column_mapping.get(field, field)
+            if not target_col or target_col == "(Skip Column)":
+                return ""
+            target_clean = str(target_col).strip().lower()
+
+            if target_col in raw_row and raw_row[target_col] is not None:
+                val = str(raw_row[target_col]).strip()
+                if val:
+                    return val
+
+            for k, v in raw_row.items():
+                if k and str(k).strip().lower() == target_clean:
+                    return str(v or "").strip()
+            return ""
 
         name = get("full_name")
         email = get("email")

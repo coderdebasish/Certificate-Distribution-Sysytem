@@ -22,7 +22,10 @@ class EmailStatus(str, Enum):
 class MatchStatus(str, Enum):
     """Certificate assignment status."""
     NOT_ASSIGNED = "not_assigned"
+    UNMATCHED = "not_assigned"
     AUTO_MATCHED = "auto_matched"
+    MATCHED = "matched"
+    LOW_CONFIDENCE = "low_confidence"
     MANUAL = "manual"
     MISSING = "missing"
 
