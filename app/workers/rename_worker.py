@@ -59,10 +59,18 @@ class RenameWorker(BaseWorker):
             from app.models.certificate import CertificateStatus
             repo = CertificateRepository(self._db_conn)
             certs = repo.get_all(self._project_id)
+            used_dest_paths: set[Path] = set()
+
             for c in certs:
                 if c.detected_name and c.status in (CertificateStatus.READY, CertificateStatus.NEEDS_REVIEW):
                     src = self._source_dir / c.original_filename
-                    dst = self._dest_dir / f"{c.detected_name}.pdf"
+                    base_name = c.detected_name
+                    dst = self._dest_dir / f"{base_name}.pdf"
+                    counter = 1
+                    while dst in used_dest_paths:
+                        dst = self._dest_dir / f"{base_name} ({counter}).pdf"
+                        counter += 1
+                    used_dest_paths.add(dst)
                     self._jobs.append(RenameJob(cert_id=c.id, source_path=src, destination_path=dst))
 
         total = len(self._jobs)

@@ -193,6 +193,23 @@ class RenameView:
             return
 
         certs = self._app.certificate_repo.get_all(self._app.active_project.id)
+
+        # Deduplicate existing database records if any old duplicates exist
+        seen_filenames: set[str] = set()
+        unique_certs = []
+        duplicate_ids_to_remove = []
+        for c in certs:
+            if c.original_filename in seen_filenames:
+                duplicate_ids_to_remove.append(c.id)
+            else:
+                seen_filenames.add(c.original_filename)
+                unique_certs.append(c)
+
+        if duplicate_ids_to_remove and self._app.db:
+            with self._app.db.transaction() as cur:
+                cur.executemany("DELETE FROM certificates WHERE id = ?", [(did,) for did in duplicate_ids_to_remove])
+            certs = unique_certs
+
         ready, review, failed = 0, 0, 0
 
         for i, c in enumerate(certs, 1):
@@ -454,6 +471,7 @@ class RenameView:
             self._analyzed_count += 1
         elif signal.type == SignalType.PROGRESS_COMPLETE:
             self._analysis_running = False
+            self._progress_frame.pack_forget()
             self._analyze_btn.configure(state="normal", text="▶  Re-analyze")
             self._header.set_button_state("↺  Dry Run", "normal")
             self._header.set_button_state("✓  Commit Rename", "normal")
@@ -462,5 +480,7 @@ class RenameView:
             self._set_status(signal.payload.get("message", "Processing complete."))
             self.load_certificates_from_db()
         elif signal.type == SignalType.PROGRESS_ERROR:
+            self._analysis_running = False
+            self._progress_frame.pack_forget()
             self._set_status(f"Error: {signal.payload.get('message', '')}")
             self._analyze_btn.configure(state="normal", text="▶  Analyze Certificates")
