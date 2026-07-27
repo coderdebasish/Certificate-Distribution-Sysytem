@@ -45,6 +45,8 @@ class EmailWorker(BaseWorker):
         db_conn=None,
         project_id: int = 0,
         delay_seconds: int = 5,
+        batch_size: int = 25,
+        batch_pause_seconds: int = 60,
         max_retries: int = 3,
     ) -> None:
         super().__init__(signal_queue=signal_queue)
@@ -55,6 +57,8 @@ class EmailWorker(BaseWorker):
         self._db_conn = db_conn
         self._project_id = project_id
         self._delay = delay_seconds
+        self._batch_size = batch_size
+        self._batch_pause_seconds = batch_pause_seconds
         self._max_retries = max_retries
 
     def _run(self) -> None:
@@ -103,7 +107,11 @@ class EmailWorker(BaseWorker):
 
             # Delay between emails (except after last)
             if idx < total and not self._should_stop():
-                time.sleep(self._delay)
+                if self._batch_size > 0 and idx % self._batch_size == 0:
+                    self._emit(Signal.log(f"⏸ Batch pause of {self._batch_pause_seconds}s after {idx} emails (Gmail quota safeguard)..."))
+                    time.sleep(self._batch_pause_seconds)
+                elif self._delay > 0:
+                    time.sleep(self._delay)
 
         self._emit(Signal(
             type=SignalType.EMAIL_QUEUE_COMPLETE,

@@ -168,19 +168,51 @@ class ParticipantsView:
 
     def _import_excel(self) -> None:
         if not self._app.active_project or not self._app.db:
+            from app.ui.components.dialogs import ErrorDialog
+            ErrorDialog(self.frame.winfo_toplevel(), self._palette, self._fonts, title="No Active Project", message="Please open or create a project first before importing participants.")
             return
 
         path = fd.askopenfilename(
-            title="Select Excel File",
-            filetypes=[("Excel", "*.xlsx *.xls"), ("All Files", "*.*")],
+            title="Select Excel or CSV File",
+            filetypes=[("Spreadsheet Files", "*.xlsx *.xls *.csv"), ("Excel Files", "*.xlsx *.xls"), ("CSV Files", "*.csv"), ("All Files", "*.*")],
         )
         if not path:
             return
 
-        self._import_status.configure(text=f"Importing {Path(path).name}...")
+        file_path = Path(path)
+        try:
+            if file_path.suffix.lower() == ".csv":
+                import csv
+                with open(file_path, mode="r", encoding="utf-8-sig", errors="replace") as f:
+                    reader = csv.reader(f)
+                    headers = [str(h).strip() for h in next(reader)]
+            else:
+                import openpyxl
+                wb = openpyxl.load_workbook(str(file_path), read_only=True, data_only=True)
+                ws = wb.active
+                rows_iter = ws.iter_rows(values_only=True)
+                headers = [str(h).strip() if h else "" for h in next(rows_iter)]
+                wb.close()
+        except Exception as exc:
+            from app.ui.components.dialogs import ErrorDialog
+            ErrorDialog(self.frame.winfo_toplevel(), self._palette, self._fonts, title="File Read Error", message=f"Could not read spreadsheet headers:\n{exc}")
+            return
+
+        from app.ui.components.dialogs import ColumnMapDialog
+        map_dialog = ColumnMapDialog(self.frame.winfo_toplevel(), self._palette, self._fonts, headers=headers)
+        if not map_dialog.mapping:
+            return
+
+        self._import_status.configure(text=f"Importing {file_path.name}...")
+        existing_emails = set()
+        if self._app.participant_repo and self._app.active_project:
+            existing_emails = {p.email.lower() for p in self._app.participant_repo.get_all(self._app.active_project.id) if p.email}
+
         self._import_worker = ImportWorker(
             signal_queue=self._app._signal_queue,
-            file_path=Path(path),
+            file_path=file_path,
+            column_mapping=map_dialog.mapping,
+            existing_emails=existing_emails,
             db_conn=self._app.db,
             project_id=self._app.active_project.id,
         )

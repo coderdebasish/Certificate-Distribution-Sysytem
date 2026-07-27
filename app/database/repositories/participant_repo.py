@@ -28,6 +28,10 @@ class ParticipantRepository:
 
     def insert(self, participant: Participant) -> Participant:
         """Insert a new participant record and return it with the assigned id."""
+        if not participant.internal_id:
+            import uuid
+            participant.internal_id = f"PID-{uuid.uuid4().hex[:8].upper()}"
+
         with self._db.transaction() as cur:
             cur.execute(
                 """

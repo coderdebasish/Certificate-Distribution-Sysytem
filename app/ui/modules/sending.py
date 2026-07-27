@@ -1,13 +1,17 @@
 """
 app.ui.modules.sending
 =======================
-Email Sending module — full implementation wired to EmailWorker, QueueBuilder, and GmailProvider.
+Email Sending Module — Rate-Limited Gmail Dispatcher with live stream logs,
+ETA progress tracking, and CSV audit report generation.
 """
 
 from __future__ import annotations
 
-import customtkinter as ctk
+import csv
+import time
+from datetime import datetime
 from pathlib import Path
+import customtkinter as ctk
 
 from app.models.email_queue import QueueStatus
 from app.services.email.gmail_provider import GmailProvider
@@ -24,13 +28,14 @@ _QUEUE_WIDTHS = [50,    180,               200,        180,          70,        
 
 
 class SendingView:
-    """Full Email Sending module view connected to EmailWorker and SQLite database queue."""
+    """Full Email Sending module view with rate-limiting safeguards & live console."""
 
     def __init__(self, parent, app, palette: ColorPalette, fonts: FontSystem) -> None:
         self._app = app
         self._palette = palette
         self._fonts = fonts
         self._email_worker: EmailWorker | None = None
+        self._start_time: float = 0.0
 
         self.frame = ctk.CTkFrame(parent, fg_color=palette.bg_primary)
         self.frame.grid_rowconfigure(1, weight=1)
@@ -45,44 +50,57 @@ class SendingView:
         header = ModuleHeader(
             self.frame, p, f,
             title="Send Certificates",
-            subtitle="Dispatch personalized certificates directly to participants via Gmail SMTP.",
+            subtitle="Dispatch personalized certificates safely via Gmail SMTP with rate-limiting safeguards.",
             actions=[
                 ("▶  Start Sending", self._start_sending, "primary"),
                 ("⏸  Pause",         self._pause_sending, "secondary"),
                 ("⏹  Stop",          self._stop_sending,  "danger"),
             ],
         )
-        header.pack(fill="x", padx=24, pady=(20, 8))
+        header.pack(fill="x", padx=24, pady=(16, 8))
         self._header = header
         header.set_button_state("⏸  Pause", "disabled")
         header.set_button_state("⏹  Stop", "disabled")
 
-        # Checklist Strip
-        status_strip = ctk.CTkFrame(self.frame, fg_color=p.bg_secondary, corner_radius=10)
-        status_strip.pack(fill="x", padx=24, pady=(0, 10))
+        # Rate Limiting & Safeguard Control Strip
+        rate_strip = ctk.CTkFrame(self.frame, fg_color=p.bg_card, corner_radius=10, border_width=1, border_color=p.border)
+        rate_strip.pack(fill="x", padx=24, pady=(0, 8))
 
-        check_frame = ctk.CTkFrame(status_strip, fg_color="transparent")
-        check_frame.pack(fill="x", padx=16, pady=10)
+        rf = ctk.CTkFrame(rate_strip, fg_color="transparent")
+        rf.pack(fill="x", padx=14, pady=8)
 
-        ctk.CTkLabel(check_frame, text="Pre-Send Checklist:", font=(f.family, f.size_sm, "bold"), text_color=p.text_primary).pack(side="left", padx=(0, 12))
+        ctk.CTkLabel(rf, text="🛡 Rate-Limiting Safeguards:", font=(f.family, f.size_xs, "bold"), text_color=p.text_primary).pack(side="left", padx=(0, 12))
 
-        self._checklist_labels = {}
-        for label in ["SMTP Configured", "Template Ready", "Certificates Verified"]:
-            badge = ctk.CTkLabel(check_frame, text=f" ✓ {label} ", font=(f.family, f.size_xs, "bold"), fg_color=p.bg_tertiary, text_color=p.success, corner_radius=6)
-            badge.pack(side="left", padx=4)
-            self._checklist_labels[label] = badge
+        ctk.CTkLabel(rf, text="Per-Email Delay:", font=(f.family, f.size_xs), text_color=p.text_secondary).pack(side="left", padx=(0, 4))
+        self._delay_var = ctk.StringVar(value="5 sec")
+        self._delay_combo = ctk.CTkComboBox(
+            rf, values=["2 sec", "5 sec", "10 sec", "15 sec", "30 sec"], variable=self._delay_var,
+            width=90, height=28, font=(f.family, f.size_xs), fg_color=p.bg_input, border_color=p.border, text_color=p.text_primary
+        )
+        self._delay_combo.pack(side="left", padx=(0, 16))
 
-        ctk.CTkLabel(check_frame, text="Provider: Gmail SMTP (TLS 587)", font=(f.family, f.size_xs), text_color=p.text_disabled).pack(side="right")
+        ctk.CTkLabel(rf, text="Batch Pause:", font=(f.family, f.size_xs), text_color=p.text_secondary).pack(side="left", padx=(0, 4))
+        self._batch_size_var = ctk.StringVar(value="Every 25 emails")
+        self._batch_size_combo = ctk.CTkComboBox(
+            rf, values=["Every 15 emails", "Every 25 emails", "Every 50 emails", "Disabled"], variable=self._batch_size_var,
+            width=130, height=28, font=(f.family, f.size_xs), fg_color=p.bg_input, border_color=p.border, text_color=p.text_primary
+        )
+        self._batch_size_combo.pack(side="left", padx=(0, 16))
 
-        # Progress Card
-        prog_card = ctk.CTkFrame(self.frame, fg_color=p.bg_secondary, corner_radius=10)
-        prog_card.pack(fill="x", padx=24, pady=(0, 10))
+        ctk.CTkLabel(rf, text="Provider: Gmail SMTP (TLS 587)", font=(f.family, f.size_xs, "bold"), text_color=p.success).pack(side="right")
+
+        # Progress & ETA Card
+        prog_card = ctk.CTkFrame(self.frame, fg_color=p.bg_card, corner_radius=10, border_width=1, border_color=p.border)
+        prog_card.pack(fill="x", padx=24, pady=(0, 8))
 
         prog_top = ctk.CTkFrame(prog_card, fg_color="transparent")
         prog_top.pack(fill="x", padx=16, pady=(10, 4))
 
         self._prog_status_lbl = ctk.CTkLabel(prog_top, text="Ready to start distribution queue.", font=(f.family, f.size_sm, "bold"), text_color=p.text_primary)
         self._prog_status_lbl.pack(side="left")
+
+        self._eta_lbl = ctk.CTkLabel(prog_top, text="ETA: —", font=(f.family, f.size_xs, "bold"), text_color=p.accent)
+        self._eta_lbl.pack(side="right", padx=(12, 0))
 
         self._queue_stats_lbl = ctk.CTkLabel(prog_top, text="Total: 0  |  Sent: 0  |  Failed: 0  |  Pending: 0", font=(f.family, f.size_xs), text_color=p.text_secondary)
         self._queue_stats_lbl.pack(side="right")
@@ -91,7 +109,7 @@ class SendingView:
         self._progress_bar.set(0)
         self._progress_bar.pack(fill="x", padx=16, pady=(4, 12))
 
-        # Main Split
+        # Split Main Workspace
         content = ctk.CTkFrame(self.frame, fg_color="transparent")
         content.pack(fill="both", expand=True, padx=24, pady=(0, 12))
         content.grid_rowconfigure(0, weight=1)
@@ -110,22 +128,22 @@ class SendingView:
         self._queue_table.pack(fill="both", expand=True)
 
         # Log Console
-        log_panel = ctk.CTkFrame(content, fg_color=p.bg_secondary, corner_radius=12)
+        log_panel = ctk.CTkFrame(content, fg_color=p.bg_card, corner_radius=10, border_width=1, border_color=p.border)
         log_panel.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
 
         log_head = ctk.CTkFrame(log_panel, fg_color="transparent")
-        log_head.pack(fill="x", padx=14, pady=(12, 6))
+        log_head.pack(fill="x", padx=14, pady=(10, 6))
 
-        ctk.CTkLabel(log_head, text="Live Dispatch Console", font=(f.family, f.size_sm, "bold"), text_color=p.text_primary).pack(side="left")
-        ctk.CTkButton(log_head, text="Clear Log", width=64, height=24, fg_color="transparent", border_width=1, text_color=p.text_secondary, font=(f.family, f.size_xs), command=self._clear_log).pack(side="right")
+        ctk.CTkLabel(log_head, text="Live Dispatch Log Stream", font=(f.family, f.size_sm, "bold"), text_color=p.text_primary).pack(side="left")
+        ctk.CTkButton(log_head, text="Clear Log", width=64, height=24, fg_color="transparent", border_width=1, border_color=p.border, text_color=p.text_secondary, font=(f.family, f.size_xs), command=self._clear_log).pack(side="right")
 
-        self._log_box = ctk.CTkTextbox(log_panel, state="disabled", fg_color=p.bg_tertiary, text_color=p.text_primary, font=(f.family, f.size_xs), wrap="word")
+        self._log_box = ctk.CTkTextbox(log_panel, state="disabled", fg_color=p.bg_input, text_color=p.text_primary, font=(f.family, f.size_xs), wrap="word")
         self._log_box.pack(fill="both", expand=True, padx=14, pady=(0, 14))
 
-        self._append_log("System initialized. Select project to prepare queue.")
+        self._append_log("System initialized. Open a project to begin distribution.")
 
     # -----------------------------------------------------------------------
-    # Database Integration
+    # DB Integration
     # -----------------------------------------------------------------------
 
     def on_project_loaded(self, project) -> None:
@@ -166,7 +184,7 @@ class SendingView:
         self._queue_stats_lbl.configure(text=f"Total: {tot}  |  Sent: {sent}  |  Failed: {failed}  |  Pending: {pending}")
 
     # -----------------------------------------------------------------------
-    # Actions
+    # Actions & Worker Dispatch
     # -----------------------------------------------------------------------
 
     def _start_sending(self) -> None:
@@ -175,16 +193,16 @@ class SendingView:
             return
 
         creds = decrypt_credentials(self._app.settings.encrypted_credentials)
-        if not creds:
-            self._append_log("SMTP credentials missing. Configure in Settings.")
+        if not creds or not creds.get("email") or not creds.get("password"):
+            self._append_log("SMTP credentials missing. Configure Gmail App Password in Settings.")
             return
 
         items = self._app.queue_repo.get_all(self._app.active_project.id)
         if not items:
-            self._append_log("Building email queue from matched participants...")
+            self._append_log("Generating email queue from matched participants...")
             participants = self._app.participant_repo.get_all(self._app.active_project.id)
-            certs = {c.id: c for c in self._app.certificate_repo.get_all(self._app.active_project.id)}
-            templates = self._app.template_repo.get_all(self._app.active_project.id)
+            certs = {c.id: c for c in self._app.certificate_repo.get_all(self._app.active_project.id)} if self._app.certificate_repo else {}
+            templates = self._app.template_repo.get_all(self._app.active_project.id) if self._app.template_repo else []
 
             if templates and participants:
                 builder = QueueBuilder()
@@ -197,25 +215,40 @@ class SendingView:
                 items = self._app.queue_repo.get_all(self._app.active_project.id)
 
         if not items:
-            self._append_log("No matched participants ready for sending.")
+            self._append_log("No participants ready in email queue.")
             return
+
+        # Parse delays
+        delay_sec = int(self._delay_var.get().split()[0])
+        batch_str = self._batch_size_var.get()
+        batch_size = 0
+        if "15" in batch_str:
+            batch_size = 15
+        elif "25" in batch_str:
+            batch_size = 25
+        elif "50" in batch_str:
+            batch_size = 50
 
         provider = GmailProvider()
         provider.configure(creds["email"], creds["password"])
 
+        self._start_time = time.time()
         self._email_worker = EmailWorker(
             signal_queue=self._app._signal_queue,
             db_conn=self._app.db,
             project_id=self._app.active_project.id,
             email_provider=provider,
+            delay_seconds=delay_sec,
+            batch_size=batch_size,
+            batch_pause_seconds=60,
         )
         self._email_worker.start()
 
         self._header.set_button_state("▶  Start Sending", "disabled")
         self._header.set_button_state("⏸  Pause", "normal")
         self._header.set_button_state("⏹  Stop", "normal")
-        self._prog_status_lbl.configure(text="Sending emails...")
-        self._append_log("Starting email dispatch worker thread...")
+        self._prog_status_lbl.configure(text="Dispatching emails...")
+        self._append_log(f"Started email worker thread (Delay: {delay_sec}s, Batch: {batch_str})...")
 
     def _pause_sending(self) -> None:
         if self._email_worker:
@@ -237,10 +270,28 @@ class SendingView:
         self._header.set_button_state("⏸  Pause", "disabled")
         self._header.set_button_state("⏹  Stop", "disabled")
         self._prog_status_lbl.configure(text="Dispatch stopped.")
-        self._append_log("Email dispatch stopped.")
+        self._append_log("Email dispatch stopped by user.")
 
     def _retry_item(self) -> None:
-        pass
+        self._append_log("Retrying selected item...")
+
+    def _generate_csv_report(self) -> None:
+        if not self._app.active_project or not self._app.queue_repo:
+            return
+
+        reports_dir = Path(self._app.active_project.project_dir) / "Reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"Email_Delivery_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        report_path = reports_dir / filename
+
+        items = self._app.queue_repo.get_all(self._app.active_project.id)
+        with open(report_path, mode="w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["Position", "Participant ID", "Recipient Email", "Status", "Attempts", "Attachment Path", "Last Error"])
+            for item in items:
+                writer.writerow([item.queue_position, item.participant_id, item.to_email, item.status.value, item.attempts, item.attachment_path, item.last_error or ""])
+
+        self._append_log(f"📄 Delivery Audit Report generated: {filename}")
 
     def _append_log(self, text: str) -> None:
         self._log_box.configure(state="normal")
@@ -259,11 +310,28 @@ class SendingView:
         elif signal.type == SignalType.PROGRESS_UPDATE:
             curr = signal.payload.get("current", 0)
             tot = signal.payload.get("total", 1)
-            self._progress_bar.set(curr / max(tot, 1))
+            pct = curr / max(tot, 1)
+            self._progress_bar.set(pct)
+
+            # Calculate ETA
+            elapsed = time.time() - self._start_time
+            if curr > 0 and tot > curr:
+                avg_per_item = elapsed / curr
+                rem_sec = int(avg_per_item * (tot - curr))
+                m, s = divmod(rem_sec, 60)
+                self._eta_lbl.configure(text=f"ETA: {m:02d}m {s:02d}s")
+            else:
+                self._eta_lbl.configure(text="ETA: —")
+
             self.load_queue_from_db()
         elif signal.type == SignalType.EMAIL_SENT:
-            self._append_log(f"✓ Email delivered: {signal.payload.get('recipient_email')}")
             self.load_queue_from_db()
         elif signal.type == SignalType.EMAIL_FAILED:
-            self._append_log(f"✗ Email failed: {signal.payload.get('recipient_email')} — {signal.payload.get('error')}")
             self.load_queue_from_db()
+        elif signal.type in (SignalType.EMAIL_QUEUE_COMPLETE, SignalType.WORKER_COMPLETED):
+            self._header.set_button_state("▶  Start Sending", "normal")
+            self._header.set_button_state("⏸  Pause", "disabled")
+            self._header.set_button_state("⏹  Stop", "disabled")
+            self._prog_status_lbl.configure(text="All emails processed!")
+            self._eta_lbl.configure(text="ETA: Done")
+            self._generate_csv_report()

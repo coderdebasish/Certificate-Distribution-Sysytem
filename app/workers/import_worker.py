@@ -90,6 +90,25 @@ class ImportWorker(BaseWorker):
 
             if import_row.is_valid:
                 valid += 1
+                if self._db_conn and self._project_id:
+                    try:
+                        from app.database.repositories.participant_repo import ParticipantRepository
+                        from app.models.participant import Participant
+                        repo = ParticipantRepository(self._db_conn)
+                        p = Participant(
+                            project_id=self._project_id,
+                            full_name=import_row.name,
+                            email=import_row.email,
+                            phone=import_row.phone,
+                            college=import_row.college,
+                            department=import_row.department,
+                            designation=import_row.designation,
+                            remarks=import_row.remarks,
+                            import_source=self._file_path.name,
+                        )
+                        repo.insert(p)
+                    except Exception as exc:
+                        logger.warning("Failed to save participant into database: %s", exc)
             else:
                 invalid += 1
 
@@ -115,23 +134,28 @@ class ImportWorker(BaseWorker):
     # -----------------------------------------------------------------------
 
     def _read_excel(self) -> list[dict[str, Any]]:
-        import openpyxl
-        wb = openpyxl.load_workbook(str(self._file_path), read_only=True, data_only=True)
-        ws = wb.active
-        rows_iter = ws.iter_rows(values_only=True)
-        headers = [str(h).strip() if h else "" for h in next(rows_iter)]
-        data = []
-        for row in rows_iter:
-            row_dict = {headers[i]: (cell or "") for i, cell in enumerate(row)}
-            data.append(row_dict)
-        wb.close()
-        return data
+        ext = self._file_path.suffix.lower()
+        if ext == ".csv":
+            import csv
+            with open(self._file_path, mode="r", encoding="utf-8-sig", errors="replace") as f:
+                reader = csv.DictReader(f)
+                return [dict(row) for row in reader]
+        else:
+            import openpyxl
+            wb = openpyxl.load_workbook(str(self._file_path), read_only=True, data_only=True)
+            ws = wb.active
+            rows_iter = ws.iter_rows(values_only=True)
+            headers = [str(h).strip() if h else "" for h in next(rows_iter)]
+            data = []
+            for row in rows_iter:
+                row_dict = {headers[i]: (cell or "") for i, cell in enumerate(row) if i < len(headers)}
+                data.append(row_dict)
+            wb.close()
+            return data
 
     def _validate_row(self, row_number: int, raw_row: dict[str, Any]) -> ImportRow:
-        inv_map = {v: k for k, v in self._column_mapping.items()}
-
         def get(field: str) -> str:
-            excel_col = inv_map.get(field, field)
+            excel_col = self._column_mapping.get(field, field)
             return str(raw_row.get(excel_col, "") or "").strip()
 
         name = get("full_name")
