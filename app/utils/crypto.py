@@ -11,6 +11,7 @@ in a local key file — never transmitted externally.
 from __future__ import annotations
 
 import base64
+import json
 import os
 from pathlib import Path
 
@@ -24,7 +25,7 @@ except ImportError:
 
 
 _KEY_FILE = Path.home() / ".cdms" / ".secret.key"
-_SALT = b"cdms_salt_v1_2027"   # Static salt (not security-critical for local use)
+_SALT = b"cdms_salt_v1_2027"
 
 
 def _get_or_create_key() -> bytes:
@@ -34,7 +35,6 @@ def _get_or_create_key() -> bytes:
     _KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
     key = Fernet.generate_key()
     _KEY_FILE.write_bytes(key)
-    # Restrict file permissions on Windows (best effort)
     try:
         import stat
         os.chmod(_KEY_FILE, stat.S_IRUSR | stat.S_IWUSR)
@@ -71,3 +71,19 @@ def decrypt(ciphertext: str) -> str:
         return f.decrypt(ciphertext.encode()).decode()
     except Exception:
         return ""
+
+
+def encrypt_credentials(creds: dict[str, str]) -> str:
+    """Convenience helper to encrypt a dict of credentials to ciphertext."""
+    return encrypt(json.dumps(creds))
+
+
+def decrypt_credentials(ciphertext: str) -> dict[str, str]:
+    """Convenience helper to decrypt ciphertext to a dict of credentials."""
+    raw = decrypt(ciphertext)
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw)
+    except Exception:
+        return {}

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import customtkinter as ctk
 
-from app.models.template import Template
+from app.models.email_template import EmailTemplate as Template
 from app.ui.theme import ColorPalette, FontSystem
 from app.ui.components.module_header import ModuleHeader
 from app.workers.signals import Signal

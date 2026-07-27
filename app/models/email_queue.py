@@ -21,6 +21,9 @@ class QueueItemStatus(str, Enum):
     RETRYING = "retrying"
 
 
+QueueStatus = QueueItemStatus
+
+
 @dataclass
 class EmailQueueItem:
     """
@@ -33,43 +36,36 @@ class EmailQueueItem:
     immediately — so a crash never causes duplicate sends.
     """
 
-    # -----------------------------------------------------------------------
     # Identity
-    # -----------------------------------------------------------------------
     id: int = 0
     project_id: int = 0
-    queue_position: int = 0              # Determines send order
+    queue_position: int = 0
 
-    # -----------------------------------------------------------------------
     # References
-    # -----------------------------------------------------------------------
     participant_id: int = 0
     certificate_id: int = 0
     template_id: int = 0
 
-    # -----------------------------------------------------------------------
-    # Rendered content (generated at queue creation time)
-    # -----------------------------------------------------------------------
+    # Rendered content
     to_email: str = ""
     to_name: str = ""
-    subject: str = ""                    # Placeholder already replaced
-    body_html: str = ""                  # Placeholder already replaced
-    attachment_path: str = ""            # Absolute path to renamed PDF
+    subject: str = ""
+    body_html: str = ""
+    attachment_path: str = ""
 
-    # -----------------------------------------------------------------------
     # Status tracking
-    # -----------------------------------------------------------------------
     status: QueueItemStatus = QueueItemStatus.PENDING
     attempts: int = 0
     last_attempt_at: datetime | None = None
     sent_at: datetime | None = None
     error_message: str = ""
 
-    # -----------------------------------------------------------------------
     # Timestamps
-    # -----------------------------------------------------------------------
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
 
     def touch(self) -> None:
         self.updated_at = datetime.now()
+
+
+QueueItem = EmailQueueItem

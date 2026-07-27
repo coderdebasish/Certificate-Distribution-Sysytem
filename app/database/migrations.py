@@ -227,3 +227,7 @@ class MigrationManager:
         with self._db.read() as cur:
             rows = cur.execute("SELECT version FROM schema_migrations").fetchall()
         return {row["version"] for row in rows}
+
+
+# Alias for backward compatibility with app controllers
+SchemaMigrator = MigrationManager

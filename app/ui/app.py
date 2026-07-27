@@ -110,6 +110,7 @@ class CDMSApplication:
 
             # Connect DB and run migrations
             self.db = DatabaseConnection(db_path)
+            self.db.open()
             migrator = SchemaMigrator(self.db)
             migrator.migrate()
 
@@ -127,7 +128,7 @@ class CDMSApplication:
                 event_name=event_name,
                 project_dir=str(proj_dir),
                 database_path=str(db_path),
-                stage=ProjectStage.INITIAL,
+                stage=ProjectStage.CREATED,
                 status=ProjectStatus.DRAFT,
             )
             self.active_project = self.project_repo.insert(proj)
@@ -149,6 +150,7 @@ class CDMSApplication:
                 return
 
             self.db = DatabaseConnection(db_path)
+            self.db.open()
             migrator = SchemaMigrator(self.db)
             migrator.migrate()
 

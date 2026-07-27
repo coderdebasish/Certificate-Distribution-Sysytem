@@ -9,9 +9,9 @@ from __future__ import annotations
 import customtkinter as ctk
 from pathlib import Path
 
-from app.models.queue_item import QueueStatus
+from app.models.email_queue import QueueStatus
 from app.services.email.gmail_provider import GmailProvider
-from app.services.email.queue_builder import QueueBuilder
+from app.services.email.queue_manager import QueueBuilder
 from app.ui.theme import ColorPalette, FontSystem
 from app.ui.components.module_header import ModuleHeader
 from app.ui.components.data_table import DataTable, TAG_SUCCESS, TAG_WARNING, TAG_ERROR, TAG_DISABLED
@@ -154,9 +154,9 @@ class SendingView:
             p_name = p.full_name if p else f"PID#{item.participant_id}"
 
             self._queue_table.add_row({
-                "Pos": str(item.position),
+                "Pos": str(item.queue_position),
                 "Participant Name": p_name,
-                "To Email": item.recipient_email,
+                "To Email": item.to_email,
                 "Attachment": Path(item.attachment_path).name if item.attachment_path else "—",
                 "Attempts": str(item.attempts),
                 "Status": item.status.value.title(),
@@ -179,13 +179,22 @@ class SendingView:
             self._append_log("SMTP credentials missing. Configure in Settings.")
             return
 
-        # Prepare queue if empty
         items = self._app.queue_repo.get_all(self._app.active_project.id)
         if not items:
             self._append_log("Building email queue from matched participants...")
-            builder = QueueBuilder(self._app.participant_repo, self._app.certificate_repo, self._app.template_repo, self._app.queue_repo)
-            items = builder.build_queue(self._app.active_project.id, self._app.active_project.project_dir)
-            self.load_queue_from_db()
+            participants = self._app.participant_repo.get_all(self._app.active_project.id)
+            certs = {c.id: c for c in self._app.certificate_repo.get_all(self._app.active_project.id)}
+            templates = self._app.template_repo.get_all(self._app.active_project.id)
+
+            if templates and participants:
+                builder = QueueBuilder()
+                new_items, errors = builder.build(self._app.active_project, participants, certs, templates[0])
+                for item in new_items:
+                    self._app.queue_repo.insert(item)
+                for err in errors:
+                    self._append_log(f"Warning: {err}")
+                self.load_queue_from_db()
+                items = self._app.queue_repo.get_all(self._app.active_project.id)
 
         if not items:
             self._append_log("No matched participants ready for sending.")

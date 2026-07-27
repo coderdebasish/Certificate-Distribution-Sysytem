@@ -47,12 +47,14 @@ class AppSettings:
     email_default_delay_seconds: int = 5
     email_max_retries: int = 3
     email_retry_delay_seconds: int = 30
+    encrypted_credentials: str = ""
 
     # OCR
     ocr_engine: Literal["paddleocr"] = "paddleocr"
     ocr_confidence_threshold: float = 70.0
     ocr_language: str = "en"
     ocr_cpu_threads: int = 4
+    fuzzy_match_threshold: float = 80.0
 
     # Backup
     backup_enabled: bool = True
