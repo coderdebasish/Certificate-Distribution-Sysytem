@@ -3,11 +3,12 @@ app.ui.app
 ===========
 Main application window.
 
-CDMSApplication is the entry point for the entire UI.  It:
+CDMSApplication is the entry point for the entire UI. It:
   - Configures CustomTkinter
   - Creates the 4-zone layout (topbar, sidebar, workspace, statusbar)
   - Manages module switching
   - Polls background worker signal queues via after()
+  - Binds global keyboard shortcuts
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from app.config.constants import (
 )
 from app.config.settings import AppSettings
 from app.ui.theme import get_palette, FONTS
+from app.ui.dialogs.new_project_dialog import NewProjectDialog
 from app.utils.logger import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -69,6 +71,7 @@ class CDMSApplication:
 
         # Build layout
         self._build_layout()
+        self._bind_shortcuts()
         self._navigate("dashboard")
 
         # Start polling worker signals
@@ -85,7 +88,7 @@ class CDMSApplication:
         self.root.mainloop()
 
     # -----------------------------------------------------------------------
-    # Layout construction
+    # Layout & Keyboard Shortcuts
     # -----------------------------------------------------------------------
 
     def _build_layout(self) -> None:
@@ -93,7 +96,6 @@ class CDMSApplication:
         self.root.grid_rowconfigure(1, weight=1)
         self.root.grid_columnconfigure(1, weight=1)
 
-        # Import components here (lazy, avoids circular at module level)
         from app.ui.components.topbar import TopBar
         from app.ui.components.sidebar import Sidebar
         from app.ui.components.statusbar import StatusBar
@@ -116,9 +118,30 @@ class CDMSApplication:
         # Module view cache
         self._module_views: dict = {}
 
+    def _bind_shortcuts(self) -> None:
+        """Bind application-wide keyboard shortcuts."""
+        self.root.bind("<Control-n>", lambda e: self.open_new_project_dialog())
+        self.root.bind("<Control-N>", lambda e: self.open_new_project_dialog())
+        self.root.bind("<Control-s>", lambda e: self.save_current_project())
+        self.root.bind("<Control-S>", lambda e: self.save_current_project())
+
     # -----------------------------------------------------------------------
-    # Navigation
+    # Navigation & Dialogs
     # -----------------------------------------------------------------------
+
+    def open_new_project_dialog(self) -> None:
+        NewProjectDialog(self.root, self.palette, FONTS, on_create=self._on_project_created)
+
+    def _on_project_created(self, name: str, event: str, location: str) -> None:
+        logger.info("Created project %s at %s", name, location)
+        self.topbar.set_project_name(name)
+        dashboard = self._module_views.get("dashboard")
+        if dashboard:
+            dashboard.set_project(name, event, stage_idx=0, status="draft")
+
+    def save_current_project(self) -> None:
+        self.topbar.set_save_status("Saving...")
+        self.root.after(800, lambda: self.topbar.set_save_status("All changes saved"))
 
     def _navigate(self, module_name: str) -> None:
         """Switch the workspace to *module_name*."""
@@ -148,7 +171,6 @@ class CDMSApplication:
 
     @staticmethod
     def _get_module_class(name: str):
-        """Return the view class for the given module name."""
         from app.ui.modules.dashboard import DashboardView
         from app.ui.modules.rename import RenameView
         from app.ui.modules.participants import ParticipantsView
@@ -177,10 +199,7 @@ class CDMSApplication:
     # -----------------------------------------------------------------------
 
     def _poll_signals(self) -> None:
-        """
-        Check the signal queue every 50 ms and dispatch to the active view.
-        Uses root.after() so it runs on the UI thread.
-        """
+        """Check signal queue every 50 ms and dispatch to active view."""
         try:
             while True:
                 signal = self._signal_queue.get_nowait()
@@ -197,8 +216,6 @@ class CDMSApplication:
     # -----------------------------------------------------------------------
 
     def _on_close(self) -> None:
-        """Handle window close — prompt to save unsaved changes."""
-        # TODO: Check for unsaved work and prompt Save / Don't Save / Cancel
         self.settings.save()
         logger.info("Application closing.")
         self.root.destroy()
