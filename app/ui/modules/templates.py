@@ -1,20 +1,14 @@
 """
 app.ui.modules.templates
 =========================
-Email Template Editor module — full implementation.
-
-Features:
-- Template selector list / sidebar
-- Subject line editor with placeholder auto-complete hints
-- Placeholder insertion toolbar buttons
-- Body HTML/Text editor with syntax emphasis
-- Live personalized preview with participant switcher
-- Validation status bar for missing/unknown placeholders
+Email Template Editor module — full implementation wired to TemplateRepository and DB context.
 """
 
 from __future__ import annotations
 
 import customtkinter as ctk
+
+from app.models.template import Template
 from app.ui.theme import ColorPalette, FontSystem
 from app.ui.components.module_header import ModuleHeader
 from app.workers.signals import Signal
@@ -30,21 +24,15 @@ _PLACEHOLDERS = [
     ("{designation}", "Participant's role/designation"),
 ]
 
-_SAMPLE_PARTICIPANTS = [
-    {"name": "Debasish Mohanty", "email": "debasish@example.com", "college": "IEM", "cert": "Debasish Mohanty.pdf"},
-    {"name": "Priya Sharma", "email": "priya@example.com", "college": "MAKAUT", "cert": "Priya Sharma.pdf"},
-    {"name": "Ravi Kumar", "email": "ravi@example.com", "college": "JU", "cert": "Ravi Kumar.pdf"},
-]
-
 
 class TemplatesView:
-    """Full Email Template Editor view."""
+    """Full Email Template Editor view connected to TemplateRepository."""
 
     def __init__(self, parent, app, palette: ColorPalette, fonts: FontSystem) -> None:
         self._app = app
         self._palette = palette
         self._fonts = fonts
-        self._selected_participant = _SAMPLE_PARTICIPANTS[0]
+        self._current_template: Template | None = None
 
         self.frame = ctk.CTkFrame(parent, fg_color=palette.bg_primary)
         self.frame.grid_rowconfigure(1, weight=1)
@@ -52,55 +40,42 @@ class TemplatesView:
 
         self._build()
 
-    # -----------------------------------------------------------------------
-    # Build
-    # -----------------------------------------------------------------------
-
     def _build(self) -> None:
         p, f = self._palette, self._fonts
 
-        # ── Header ──────────────────────────────────────────────────────
+        # Header
         header = ModuleHeader(
             self.frame, p, f,
             title="Email Templates",
             subtitle="Compose personalized email templates using dynamic placeholders.",
             actions=[
                 ("💾  Save Template", self._save_template, "primary"),
-                ("＋  New Template", self._new_template, "secondary"),
             ],
         )
         header.pack(fill="x", padx=24, pady=(20, 8))
 
-        # ── Split Workspace (Editor left, Preview right) ────────────────
         workspace = ctk.CTkFrame(self.frame, fg_color="transparent")
         workspace.pack(fill="both", expand=True, padx=24, pady=(0, 12))
         workspace.grid_rowconfigure(0, weight=1)
         workspace.grid_columnconfigure(0, weight=6)
         workspace.grid_columnconfigure(1, weight=5)
 
-        # Left: Editor Panel
+        # Editor Panel
         editor_panel = ctk.CTkFrame(workspace, fg_color=p.bg_secondary, corner_radius=12)
         editor_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
 
-        # Subject Input
-        ctk.CTkLabel(editor_panel, text="Subject Line",
-                     font=(f.family, f.size_sm, "bold"),
-                     text_color=p.text_primary).pack(anchor="w", padx=16, pady=(12, 4))
+        ctk.CTkLabel(editor_panel, text="Subject Line", font=(f.family, f.size_sm, "bold"), text_color=p.text_primary).pack(anchor="w", padx=16, pady=(12, 4))
 
         self._subject_var = ctk.StringVar(value="Certificate of Participation for {name} - {event_name}")
         self._subject_var.trace_add("write", self._on_content_change)
         
         self._subject_entry = ctk.CTkEntry(
             editor_panel, textvariable=self._subject_var, height=36,
-            fg_color=p.bg_tertiary, text_color=p.text_primary,
-            font=(f.family, f.size_sm)
+            fg_color=p.bg_tertiary, text_color=p.text_primary, font=(f.family, f.size_sm)
         )
         self._subject_entry.pack(fill="x", padx=16, pady=(0, 8))
 
-        # Placeholder Quick Insertion Bar
-        ctk.CTkLabel(editor_panel, text="Insert Placeholders",
-                     font=(f.family, f.size_xs, "bold"),
-                     text_color=p.text_secondary).pack(anchor="w", padx=16, pady=(4, 2))
+        ctk.CTkLabel(editor_panel, text="Insert Placeholders", font=(f.family, f.size_xs, "bold"), text_color=p.text_secondary).pack(anchor="w", padx=16, pady=(4, 2))
 
         ph_bar = ctk.CTkScrollableFrame(editor_panel, orientation="horizontal", height=40, fg_color="transparent")
         ph_bar.pack(fill="x", padx=12, pady=(0, 8))
@@ -114,10 +89,7 @@ class TemplatesView:
             )
             btn.pack(side="left", padx=3)
 
-        # Body Text Editor
-        ctk.CTkLabel(editor_panel, text="Email Body (HTML supported)",
-                     font=(f.family, f.size_sm, "bold"),
-                     text_color=p.text_primary).pack(anchor="w", padx=16, pady=(4, 4))
+        ctk.CTkLabel(editor_panel, text="Email Body (HTML supported)", font=(f.family, f.size_sm, "bold"), text_color=p.text_primary).pack(anchor="w", padx=16, pady=(4, 4))
 
         default_body = (
             "Dear {name},\n\n"
@@ -128,106 +100,72 @@ class TemplatesView:
             "{college}"
         )
 
-        self._body_editor = ctk.CTkTextbox(
-            editor_panel, fg_color=p.bg_tertiary, text_color=p.text_primary,
-            font=(f.family, f.size_sm), wrap="word"
-        )
+        self._body_editor = ctk.CTkTextbox(editor_panel, fg_color=p.bg_tertiary, text_color=p.text_primary, font=(f.family, f.size_sm), wrap="word")
         self._body_editor.insert("1.0", default_body)
         self._body_editor.pack(fill="both", expand=True, padx=16, pady=(0, 12))
         self._body_editor.bind("<KeyRelease>", self._on_content_change)
 
-        # Validation Bar
-        self._val_bar = ctk.CTkFrame(editor_panel, fg_color=p.bg_tertiary, corner_radius=6)
-        self._val_bar.pack(fill="x", padx=16, pady=(0, 12))
-
-        self._val_label = ctk.CTkLabel(
-            self._val_bar, text="✓ All placeholders valid",
-            font=(f.family, f.size_xs), text_color=p.success
-        )
-        self._val_label.pack(side="left", padx=8, pady=4)
-
-        # Right: Live Preview Panel
+        # Right: Live Preview
         preview_panel = ctk.CTkFrame(workspace, fg_color=p.bg_secondary, corner_radius=12)
         preview_panel.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
 
-        # Preview Header & Switcher
         prev_head = ctk.CTkFrame(preview_panel, fg_color="transparent")
         prev_head.pack(fill="x", padx=16, pady=(12, 8))
 
-        ctk.CTkLabel(prev_head, text="Live Preview",
-                     font=(f.family, f.size_md, "bold"),
-                     text_color=p.text_primary).pack(side="left")
+        ctk.CTkLabel(prev_head, text="Live Preview", font=(f.family, f.size_md, "bold"), text_color=p.text_primary).pack(side="left")
 
-        # Participant selector for preview context
-        self._part_menu = ctk.CTkOptionMenu(
-            prev_head, values=[p["name"] for p in _SAMPLE_PARTICIPANTS],
-            width=160, height=28, fg_color=p.bg_tertiary,
-            text_color=p.text_primary, font=(f.family, f.size_xs),
-            command=self._on_preview_participant_change
-        )
-        self._part_menu.pack(side="right")
-
-        ctk.CTkLabel(prev_head, text="Preview as:",
-                     font=(f.family, f.size_xs),
-                     text_color=p.text_secondary).pack(side="right", padx=6)
-
-        # Subject preview box
-        self._subject_preview = ctk.CTkLabel(
-            preview_panel, text="", font=(f.family, f.size_sm, "bold"),
-            text_color=p.accent, anchor="w", wraplength=340
-        )
+        self._subject_preview = ctk.CTkLabel(preview_panel, text="", font=(f.family, f.size_sm, "bold"), text_color=p.accent, anchor="w", wraplength=340)
         self._subject_preview.pack(fill="x", padx=16, pady=(0, 8))
 
-        # Attachment badge preview
-        self._attach_badge = ctk.CTkLabel(
-            preview_panel, text="📎 Attachment: Debasish Mohanty.pdf",
-            font=(f.family, f.size_xs), fg_color=p.bg_tertiary,
-            text_color=p.text_secondary, corner_radius=6, anchor="w"
-        )
+        self._attach_badge = ctk.CTkLabel(preview_panel, text="📎 Attachment: Certificate.pdf", font=(f.family, f.size_xs), fg_color=p.bg_tertiary, text_color=p.text_secondary, corner_radius=6, anchor="w")
         self._attach_badge.pack(anchor="w", padx=16, pady=(0, 12))
 
-        # Rendered Body display
-        self._body_preview = ctk.CTkTextbox(
-            preview_panel, state="disabled", fg_color=p.bg_tertiary,
-            text_color=p.text_primary, font=(f.family, f.size_sm), wrap="word"
-        )
+        self._body_preview = ctk.CTkTextbox(preview_panel, state="disabled", fg_color=p.bg_tertiary, text_color=p.text_primary, font=(f.family, f.size_sm), wrap="word")
         self._body_preview.pack(fill="both", expand=True, padx=16, pady=(0, 16))
 
-        # Initial preview render
         self._update_preview()
 
     # -----------------------------------------------------------------------
-    # Helper & Event Handlers
+    # DB Integration
+    # -----------------------------------------------------------------------
+
+    def on_project_loaded(self, project) -> None:
+        if not self._app.template_repo or not project:
+            return
+
+        templates = self._app.template_repo.get_all(project.id)
+        if templates:
+            self._current_template = templates[0]
+            self._subject_var.set(self._current_template.subject)
+            self._body_editor.delete("1.0", "end")
+            self._body_editor.insert("1.0", self._current_template.body_html)
+            self._update_preview()
+
+    # -----------------------------------------------------------------------
+    # Actions
     # -----------------------------------------------------------------------
 
     def _insert_placeholder(self, tag: str) -> None:
-        """Insert placeholder into body editor at current cursor position."""
         self._body_editor.insert("insert", tag)
         self._update_preview()
 
     def _on_content_change(self, *args) -> None:
         self._update_preview()
 
-    def _on_preview_participant_change(self, name: str) -> None:
-        for part in _SAMPLE_PARTICIPANTS:
-            if part["name"] == name:
-                self._selected_participant = part
-                break
-        self._update_preview()
-
     def _update_preview(self) -> None:
-        """Substitute placeholders using selected participant data and update preview."""
         subj_raw = self._subject_var.get()
         body_raw = self._body_editor.get("1.0", "end-1c")
 
-        p_data = self._selected_participant
+        proj_name = self._app.active_project.name if self._app.active_project else "Sample Event"
+        event_name = self._app.active_project.event_name if self._app.active_project else "Sample Event 2026"
+
         replacements = {
-            "{name}": p_data["name"],
-            "{email}": p_data["email"],
-            "{certificate_filename}": p_data["cert"],
-            "{event_name}": "National Innovation Symposium 2026",
-            "{project_name}": "Symposium 2026",
-            "{college}": p_data["college"],
+            "{name}": "Debasish Mohanty",
+            "{email}": "debasish@example.com",
+            "{certificate_filename}": "Debasish Mohanty.pdf",
+            "{event_name}": event_name,
+            "{project_name}": proj_name,
+            "{college}": "IEM Kolkata",
             "{department}": "Computer Science",
             "{designation}": "Participant",
         }
@@ -240,18 +178,36 @@ class TemplatesView:
             body_rendered = body_rendered.replace(key, val)
 
         self._subject_preview.configure(text=f"Subject: {subj_rendered}")
-        self._attach_badge.configure(text=f"📎 Attachment: {p_data['cert']}")
-
         self._body_preview.configure(state="normal")
         self._body_preview.delete("1.0", "end")
         self._body_preview.insert("1.0", body_rendered)
         self._body_preview.configure(state="disabled")
 
     def _save_template(self) -> None:
-        pass
+        if not self._app.active_project or not self._app.template_repo:
+            self._app.statusbar.set_status("No project open to save template.")
+            return
 
-    def _new_template(self) -> None:
-        pass
+        subj = self._subject_var.get().strip()
+        body = self._body_editor.get("1.0", "end-1c").strip()
+
+        if self._current_template:
+            self._current_template.subject = subj
+            self._current_template.body_html = body
+            self._current_template.body_text = body
+            self._app.template_repo.update(self._current_template)
+        else:
+            tmpl = Template(
+                project_id=self._app.active_project.id,
+                name="Default Email Template",
+                subject=subj,
+                body_html=body,
+                body_text=body,
+                is_default=True,
+            )
+            self._current_template = self._app.template_repo.insert(tmpl)
+
+        self._app.statusbar.set_status("Email template saved successfully.")
 
     def on_signal(self, signal: Signal) -> None:
         pass
