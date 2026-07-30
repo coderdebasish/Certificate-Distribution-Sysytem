@@ -143,7 +143,7 @@ class SettingsView:
             provider.configure(email_addr, app_pass)
             res = provider.test_connection()
             if res.success:
-                self._app.settings.encrypted_credentials = encrypt_credentials(email_addr, app_pass)
+                self._app.settings.encrypted_credentials = encrypt_credentials({"email": email_addr, "password": app_pass})
                 self._app.settings.save()
                 self._test_status.configure(text="✓ SMTP Connection Successful & Saved!", text_color=self._palette.success)
             else:
@@ -158,7 +158,7 @@ class SettingsView:
         email_addr = self._email_entry.get().strip()
         app_pass = self._pass_entry.get().strip()
         if email_addr and app_pass:
-            settings.encrypted_credentials = encrypt_credentials(email_addr, app_pass)
+            settings.encrypted_credentials = encrypt_credentials({"email": email_addr, "password": app_pass})
 
         try:
             settings.ocr_confidence_threshold = float(self._ocr_conf_entry.get().strip() or 70.0)

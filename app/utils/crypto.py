@@ -73,8 +73,12 @@ def decrypt(ciphertext: str) -> str:
         return ""
 
 
-def encrypt_credentials(creds: dict[str, str]) -> str:
-    """Convenience helper to encrypt a dict of credentials to ciphertext."""
+def encrypt_credentials(creds_or_email: dict[str, str] | str, password: str = "") -> str:
+    """Convenience helper to encrypt credentials to ciphertext."""
+    if isinstance(creds_or_email, str):
+        creds = {"email": creds_or_email, "password": password}
+    else:
+        creds = creds_or_email
     return encrypt(json.dumps(creds))
 
 
