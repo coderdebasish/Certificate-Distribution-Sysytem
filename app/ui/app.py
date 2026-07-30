@@ -228,6 +228,9 @@ class CDMSApplication:
 
     def _navigate(self, module_name: str) -> None:
         if self._current_module == module_name and module_name in self._module_views:
+            view = self._module_views[module_name]
+            if hasattr(view, "on_project_loaded") and self.active_project:
+                view.on_project_loaded(self.active_project)
             return
 
         for view in self._module_views.values():
@@ -239,11 +242,15 @@ class CDMSApplication:
                 logger.warning("Unknown module: %s", module_name)
                 return
             view_inst = view_class(self.workspace, self, self.palette, FONTS)
-            if hasattr(view_inst, "on_project_loaded") and self.active_project:
-                view_inst.on_project_loaded(self.active_project)
             self._module_views[module_name] = view_inst
 
         view = self._module_views[module_name]
+        if hasattr(view, "on_project_loaded") and self.active_project:
+            try:
+                view.on_project_loaded(self.active_project)
+            except Exception as exc:
+                logger.error("Error refreshing view %s: %s", module_name, exc)
+
         view.frame.grid(row=0, column=0, sticky="nsew")
         self._current_module = module_name
         self.sidebar.set_active(module_name)

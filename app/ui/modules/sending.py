@@ -157,10 +157,11 @@ class SendingView:
             return
 
         items = self._app.queue_repo.get_all(self._app.active_project.id)
+        participants = self._app.participant_repo.get_all(self._app.active_project.id) if self._app.participant_repo else []
 
-        # Auto-generate queue if currently empty
-        if not items and self._app.participant_repo:
-            participants = self._app.participant_repo.get_all(self._app.active_project.id)
+        # Auto-generate queue if currently empty or participant count changed
+        if (not items or len(items) != len(participants)) and participants:
+            self._app.queue_repo.clear(self._app.active_project.id)
             if participants:
                 # 1. Ensure email template exists in DB
                 templates = self._app.template_repo.get_all(self._app.active_project.id) if self._app.template_repo else []
