@@ -1,7 +1,8 @@
 """
 app.services.email.gmail_provider
 ===================================
-Gmail SMTP provider implementation.
+Gmail SMTP provider implementation with high deliverability,
+anti-spam headers, and MIME multipart compliance.
 
 Authentication uses Gmail App Passwords — never the user's Google password.
 Credentials are stored encrypted via app.utils.crypto.
@@ -10,10 +11,12 @@ Credentials are stored encrypted via app.utils.crypto.
 from __future__ import annotations
 
 import logging
+import re
 import smtplib
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formataddr, formatdate, make_msgid
 from pathlib import Path
 
 from app.services.email.base import EmailProvider, EmailMessage, SendResult
@@ -28,7 +31,9 @@ class GmailProvider(EmailProvider):
     """
     Sends emails through Gmail using SMTP with TLS.
 
-    Credentials must be set with ``configure()`` before calling ``send()``.
+    Implements full MIME multipart/alternative structure (Plain Text + HTML),
+    RFC-compliant headers (Message-ID, Date, Reply-To), and UTF-8 formatting
+    to maximize inbox deliverability and bypass spam filters.
     """
 
     def __init__(self) -> None:
@@ -54,7 +59,7 @@ class GmailProvider(EmailProvider):
             raise ValueError("Invalid App Password.")
         self._email_address = email_address.strip()
         self._app_password = app_password.replace(" ", "")
-        self._sender_name = sender_name or email_address
+        self._sender_name = sender_name.strip() or self._email_address.split("@")[0]
 
     def test_connection(self) -> SendResult:
         """Attempt SMTP login without sending an email."""
@@ -103,22 +108,59 @@ class GmailProvider(EmailProvider):
             logger.error("Failed to send to %s: %s", message.to_email, exc)
             return SendResult(success=False, error_message=str(exc))
 
+    def create_draft(self, message: EmailMessage) -> SendResult:
+        """Save email directly to user's Gmail Drafts folder using IMAP SSL."""
+        self._assert_configured()
+        import imaplib
+        import time
+
+        try:
+            mime = self._build_mime(message)
+            with imaplib.IMAP4_SSL("imap.gmail.com", 993) as imap:
+                imap.login(self._email_address, self._app_password)
+                now = imaplib.Time2Internaldate(time.time())
+                res, _ = imap.append("[Gmail]/Drafts", "\\Draft", now, mime.as_bytes())
+                if res != "OK":
+                    res, _ = imap.append("Drafts", "\\Draft", now, mime.as_bytes())
+
+            logger.info("Email drafted to Gmail Drafts for %s", message.to_email)
+            return SendResult(success=True)
+        except Exception as exc:
+            logger.error("Failed to draft email for %s: %s", message.to_email, exc)
+            return SendResult(success=False, error_message=str(exc))
+
     # -----------------------------------------------------------------------
-    # Internal
+    # Internal MIME Builder (Anti-Spam & Deliverability Engine)
     # -----------------------------------------------------------------------
 
     def _build_mime(self, message: EmailMessage) -> MIMEMultipart:
         msg = MIMEMultipart("mixed")
-        msg["From"] = f"{self._sender_name} <{self._email_address}>"
-        msg["To"] = f"{message.to_name} <{message.to_email}>" if message.to_name else message.to_email
+
+        # RFC-compliant headers
+        sender = formataddr((self._sender_name, self._email_address))
+        recipient = formataddr((message.to_name, message.to_email)) if message.to_name else message.to_email
+
+        domain = self._email_address.split("@")[-1] if "@" in self._email_address else "gmail.com"
+
+        msg["From"] = sender
+        msg["To"] = recipient
         msg["Subject"] = message.subject
+        msg["Date"] = formatdate(localtime=True)
+        msg["Message-ID"] = make_msgid(domain=domain)
+        msg["Reply-To"] = self._email_address
+        msg["X-Mailer"] = "Certificate Distribution System/1.0"
+        msg["Auto-Submitted"] = "auto-generated"
 
-        # Body
-        body = MIMEMultipart("alternative")
-        body.attach(MIMEText(message.body_html, "html", "utf-8"))
-        msg.attach(body)
+        # Alternative container for Plain Text + HTML (Required to pass Gmail spam filters)
+        alt = MIMEMultipart("alternative")
+        plain_text = self._strip_html(message.body_html)
+        
+        alt.attach(MIMEText(plain_text, "plain", "utf-8"))
+        alt.attach(MIMEText(message.body_html, "html", "utf-8"))
+        
+        msg.attach(alt)
 
-        # Attachment
+        # PDF Attachment
         if message.attachment_path:
             attachment_path = Path(message.attachment_path)
             if attachment_path.exists():
@@ -134,6 +176,15 @@ class GmailProvider(EmailProvider):
                 logger.warning("Attachment not found: %s", attachment_path)
 
         return msg
+
+    @staticmethod
+    def _strip_html(html_content: str) -> str:
+        """Convert HTML body into clean plain text for anti-spam multipart alternative compliance."""
+        text = re.sub(r'<br\s*/?>', '\n', html_content, flags=re.IGNORECASE)
+        text = re.sub(r'</p>', '\n\n', text, flags=re.IGNORECASE)
+        text = re.sub(r'<[^>]+>', '', text)
+        lines = [line.strip() for line in text.splitlines()]
+        return '\n'.join(line for line in lines if line)
 
     def _assert_configured(self) -> None:
         if not self._email_address or not self._app_password:

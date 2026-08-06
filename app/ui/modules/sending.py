@@ -52,11 +52,12 @@ class SendingView:
         header = ModuleHeader(
             self.frame, p, f,
             title="Send Certificates",
-            subtitle="Dispatch personalized certificates safely via Gmail SMTP with rate-limiting safeguards.",
+            subtitle="Dispatch personalized certificates safely via Gmail SMTP or save directly to Gmail Drafts.",
             actions=[
-                ("▶  Start Sending", self._start_sending, "primary"),
-                ("⏸  Pause",         self._pause_sending, "secondary"),
-                ("⏹  Stop",          self._stop_sending,  "danger"),
+                ("📥  Save to Gmail Drafts", self._draft_all,       "secondary"),
+                ("▶  Start Auto Sending",   self._start_sending,   "primary"),
+                ("⏸  Pause",                self._pause_sending,   "secondary"),
+                ("⏹  Stop",                 self._stop_sending,    "danger"),
             ],
         )
         header.pack(fill="x", padx=24, pady=(16, 8))
@@ -239,7 +240,13 @@ class SendingView:
     # Actions & Worker Dispatch
     # -----------------------------------------------------------------------
 
+    def _draft_all(self) -> None:
+        self._start_sending_worker(draft_mode=True)
+
     def _start_sending(self) -> None:
+        self._start_sending_worker(draft_mode=False)
+
+    def _start_sending_worker(self, draft_mode: bool = False) -> None:
         if not self._app.active_project or not self._app.db:
             self._append_log("No active project loaded.")
             return
@@ -282,14 +289,21 @@ class SendingView:
             email_provider=provider,
             delay_seconds=delay_sec,
             batch_size=batch_size,
+            draft_mode=draft_mode,
         )
         self._email_worker.start()
 
-        self._header.set_button_state("▶  Start Sending", "disabled")
+        self._header.set_button_state("▶  Start Auto Sending", "disabled")
+        self._header.set_button_state("📥  Save to Gmail Drafts", "disabled")
         self._header.set_button_state("⏸  Pause", "normal")
         self._header.set_button_state("⏹  Stop", "normal")
-        self._prog_status_lbl.configure(text="Dispatching certificates via Gmail SMTP...")
-        self._append_log("🚀 Distribution pipeline started.")
+
+        if draft_mode:
+            self._prog_status_lbl.configure(text="Drafting emails to Gmail Drafts folder...")
+            self._append_log("📥 Gmail Draft generation pipeline started.")
+        else:
+            self._prog_status_lbl.configure(text="Dispatching certificates via Gmail SMTP...")
+            self._append_log("🚀 Distribution pipeline started.")
 
     def _pause_sending(self) -> None:
         if self._email_worker:
@@ -344,7 +358,7 @@ class SendingView:
     # -----------------------------------------------------------------------
 
     def on_signal(self, signal: Signal) -> None:
-        if signal.type == SignalType.WORKER_PROGRESS:
+        if signal.type == SignalType.PROGRESS_UPDATE:
             curr = signal.payload.get("current", 0)
             tot = signal.payload.get("total", 1)
             frac = curr / max(tot, 1)
@@ -357,15 +371,16 @@ class SendingView:
                 m, s = divmod(int(rem), 60)
                 self._eta_lbl.configure(text=f"ETA: {m}m {s}s")
 
-        elif signal.type == SignalType.WORKER_LOG:
+        elif signal.type == SignalType.LOG_MESSAGE:
             msg = signal.payload.get("message", "")
             self._append_log(msg)
 
-        elif signal.type in (SignalType.EMAIL_SENT, SignalType.EMAIL_FAILED, SignalType.EMAIL_QUEUE_COMPLETE, SignalType.WORKER_COMPLETED):
+        elif signal.type in (SignalType.EMAIL_SENT, SignalType.EMAIL_FAILED, SignalType.EMAIL_QUEUE_COMPLETE, SignalType.PROGRESS_COMPLETE):
             self.load_queue_from_db()
-            if signal.type in (SignalType.EMAIL_QUEUE_COMPLETE, SignalType.WORKER_COMPLETED):
-                self._header.set_button_state("▶  Start Sending", "normal")
+            if signal.type in (SignalType.EMAIL_QUEUE_COMPLETE, SignalType.PROGRESS_COMPLETE):
+                self._header.set_button_state("▶  Start Auto Sending", "normal")
+                self._header.set_button_state("📥  Save to Gmail Drafts", "normal")
                 self._header.set_button_state("⏸  Pause", "disabled")
                 self._header.set_button_state("⏹  Stop", "disabled")
-                self._prog_status_lbl.configure(text="Distribution completed successfully!")
+                self._prog_status_lbl.configure(text="Operation completed successfully!")
                 self._eta_lbl.configure(text="ETA: Completed")
