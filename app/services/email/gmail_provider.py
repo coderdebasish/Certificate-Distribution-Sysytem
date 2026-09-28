@@ -161,20 +161,22 @@ class GmailProvider(EmailProvider):
         
         msg.attach(alt)
 
-        # PDF Attachment
+        # PDF Attachment(s) — supports single file or multiple files separated by ';'
         if message.attachment_path:
-            attachment_path = Path(message.attachment_path)
-            if attachment_path.exists():
-                with open(attachment_path, "rb") as f:
-                    part = MIMEApplication(f.read(), _subtype="pdf")
-                    part.add_header(
-                        "Content-Disposition",
-                        "attachment",
-                        filename=attachment_path.name,
-                    )
-                    msg.attach(part)
-            else:
-                logger.warning("Attachment not found: %s", attachment_path)
+            raw_paths = [p.strip() for p in message.attachment_path.split(";") if p.strip()]
+            for raw_path in raw_paths:
+                attachment_path = Path(raw_path)
+                if attachment_path.exists():
+                    with open(attachment_path, "rb") as f:
+                        part = MIMEApplication(f.read(), _subtype="pdf")
+                        part.add_header(
+                            "Content-Disposition",
+                            "attachment",
+                            filename=attachment_path.name,
+                        )
+                        msg.attach(part)
+                else:
+                    logger.warning("Attachment not found: %s", attachment_path)
 
         return msg
 

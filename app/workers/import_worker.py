@@ -32,6 +32,8 @@ class ImportRow:
     department: str = ""
     designation: str = ""
     remarks: str = ""
+    team_name: str = ""
+    is_team_leader: bool = False
     is_valid: bool = True
     error_message: str = ""
 
@@ -104,6 +106,8 @@ class ImportWorker(BaseWorker):
                             department=import_row.department,
                             designation=import_row.designation,
                             remarks=import_row.remarks,
+                            team_name=import_row.team_name,
+                            is_team_leader=import_row.is_team_leader,
                             import_source=self._file_path.name,
                         )
                         repo.insert(p)
@@ -199,6 +203,9 @@ class ImportWorker(BaseWorker):
             return ImportRow(row_number=row_number, name=name, email=email,
                              is_valid=False, error_message=f"Duplicate email: {email}")
 
+        leader_raw = (get("is_team_leader") or get("leader") or get("role") or "").lower().strip()
+        is_team_leader = leader_raw in ("1", "true", "yes", "leader", "team leader", "lead", "head")
+
         return ImportRow(
             row_number=row_number,
             name=name,
@@ -208,5 +215,7 @@ class ImportWorker(BaseWorker):
             department=get("department"),
             designation=get("designation"),
             remarks=get("remarks"),
+            team_name=get("team_name"),
+            is_team_leader=is_team_leader,
             is_valid=True,
         )

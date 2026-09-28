@@ -90,9 +90,12 @@ class PlaceholderEngine:
         college: str = "",
         department: str = "",
         designation: str = "",
+        team_name: str = "",
+        leader_name: str = "",
+        team_members: str = "",
     ) -> dict[str, str]:
         """
-        Build a substitution context dictionary for one participant.
+        Build a substitution context dictionary for one participant or team.
         """
         today = date.today()
         return {
@@ -104,6 +107,9 @@ class PlaceholderEngine:
             "college": college,
             "department": department,
             "designation": designation,
+            "team_name": team_name,
+            "leader_name": leader_name or name,
+            "team_members": team_members,
             "date": today.strftime("%d %B %Y"),
             "year": str(today.year),
         }

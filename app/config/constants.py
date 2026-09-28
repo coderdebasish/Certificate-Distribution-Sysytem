@@ -106,4 +106,7 @@ SUPPORTED_PLACEHOLDERS: tuple[str, ...] = (
     "{designation}",
     "{date}",
     "{year}",
+    "{team_name}",
+    "{leader_name}",
+    "{team_members}",
 )

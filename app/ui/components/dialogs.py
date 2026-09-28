@@ -187,6 +187,8 @@ class ColumnMapDialog(ctk.CTkToplevel):
             ("department", "Department / Branch"),
             ("designation", "Designation / Role"),
             ("phone", "Phone Number"),
+            ("team_name", "Team / Group Name"),
+            ("is_team_leader", "Team Leader (Role/Flag)"),
         ]
 
         form_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -207,6 +209,12 @@ class ColumnMapDialog(ctk.CTkToplevel):
                     matched = h
                     break
                 elif key == "email" and any(k in h_lower for k in ["email", "mail"]):
+                    matched = h
+                    break
+                elif key == "team_name" and any(k in h_lower for k in ["team", "group", "team_name", "team name"]):
+                    matched = h
+                    break
+                elif key == "is_team_leader" and any(k in h_lower for k in ["leader", "is_leader", "team leader", "lead"]):
                     matched = h
                     break
                 elif key == "college" and any(k in h_lower for k in ["college", "university", "institute", "school"]):
