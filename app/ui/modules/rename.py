@@ -396,12 +396,17 @@ class RenameView:
         self._analyze_btn.configure(state="disabled", text="Analyzing...")
         self._set_status("Analyzing certificates sequentially...")
 
+        parts = self._app.participant_repo.get_all(self._app.active_project.id) if (getattr(self._app, "participant_repo", None) and getattr(self._app, "active_project", None)) else []
+        p_names = [p.full_name for p in parts if p.full_name]
+
         self._ocr_worker = OCRWorker(
             signal_queue=self._app._signal_queue,
             pdf_folder=source_folder,
             db_conn=getattr(self._app, "db", None),
             project_id=self._app.active_project.id if getattr(self._app, "active_project", None) else 0,
             ocr_threshold=getattr(self._app.settings, "ocr_confidence_threshold", 70.0),
+            event_name=self._app.active_project.event_name if getattr(self._app, "active_project", None) else "",
+            participant_names=p_names,
         )
         self._ocr_worker.start()
 

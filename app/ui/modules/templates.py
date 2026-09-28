@@ -323,7 +323,14 @@ class TemplatesView:
             )
             self._current_template = self._app.template_repo.insert(tmpl)
 
+        # Force clear cached queue so SendingView will re-render with updated template
+        if self._app.queue_repo and self._app.active_project:
+            self._app.queue_repo.clear(self._app.active_project.id)
+
         self._app.statusbar.set_status("Email template saved successfully.")
+
+    def auto_save_if_needed(self) -> None:
+        self._save_template()
 
     def on_signal(self, signal: Signal) -> None:
         pass

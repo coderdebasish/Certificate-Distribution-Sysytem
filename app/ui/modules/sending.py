@@ -187,16 +187,26 @@ class SendingView:
                 # 3. Ensure every item has a valid certificate_id in DB (foreign key safety)
                 if self._app.certificate_repo:
                     for item in new_items:
-                        if item.certificate_id == 0 and item.attachment_path:
-                            p_path = Path(item.attachment_path)
-                            c_obj = Certificate(
-                                project_id=self._app.active_project.id,
-                                original_filename=p_path.name,
-                                original_file_path=str(p_path),
-                                renamed_filename=p_path.name,
-                                renamed_file_path=str(p_path),
-                                detected_name=p_path.stem,
-                            )
+                        if item.certificate_id == 0:
+                            if item.attachment_path:
+                                p_path = Path(item.attachment_path)
+                                c_obj = Certificate(
+                                    project_id=self._app.active_project.id,
+                                    original_filename=p_path.name,
+                                    original_file_path=str(p_path),
+                                    renamed_filename=p_path.name,
+                                    renamed_file_path=str(p_path),
+                                    detected_name=p_path.stem,
+                                )
+                            else:
+                                c_obj = Certificate(
+                                    project_id=self._app.active_project.id,
+                                    original_filename="None",
+                                    original_file_path="",
+                                    renamed_filename="None",
+                                    renamed_file_path="",
+                                    detected_name="No Attachment",
+                                )
                             inserted_cert = self._app.certificate_repo.insert(c_obj)
                             item.certificate_id = inserted_cert.id
 

@@ -227,6 +227,14 @@ class CDMSApplication:
         self.root.after(600, lambda: self.topbar.set_save_status("All changes saved"))
 
     def _navigate(self, module_name: str) -> None:
+        if self._current_module and self._current_module in self._module_views:
+            prev_view = self._module_views[self._current_module]
+            if hasattr(prev_view, "auto_save_if_needed"):
+                try:
+                    prev_view.auto_save_if_needed()
+                except Exception as exc:
+                    logger.error("Auto save failed for %s: %s", self._current_module, exc)
+
         if self._current_module == module_name and module_name in self._module_views:
             view = self._module_views[module_name]
             if hasattr(view, "on_project_loaded") and self.active_project:

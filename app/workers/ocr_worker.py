@@ -43,6 +43,8 @@ class OCRWorker(BaseWorker):
         db_conn=None,
         project_id: int = 0,
         ocr_threshold: float = 70.0,
+        event_name: str = "",
+        participant_names: list[str] | set[str] | None = None,
     ) -> None:
         super().__init__(signal_queue=signal_queue)
         folder_path = pdf_folder or source_folder or "."
@@ -53,6 +55,8 @@ class OCRWorker(BaseWorker):
         self._ocr_engine = ocr_engine or PaddleOCREngine()
         self._name_detector = NameDetector()
         self._pdf_paths = pdf_paths
+        self._event_name = event_name
+        self._participant_names = list(participant_names) if participant_names else []
 
     def _run(self) -> None:
         pdfs = self._pdf_paths or sorted(self._source_folder.glob("*.pdf"))
@@ -67,7 +71,16 @@ class OCRWorker(BaseWorker):
         repo = None
         if self._db_conn and self._project_id:
             from app.database.repositories.certificate_repo import CertificateRepository
+            from app.database.repositories.project_repo import ProjectRepository
+            from app.database.repositories.participant_repo import ParticipantRepository
             repo = CertificateRepository(self._db_conn)
+            if not self._event_name:
+                proj = ProjectRepository(self._db_conn).get_by_id(self._project_id)
+                if proj and proj.event_name:
+                    self._event_name = proj.event_name
+            if not self._participant_names:
+                parts = ParticipantRepository(self._db_conn).get_all(self._project_id)
+                self._participant_names = [p.full_name for p in parts if p.full_name]
 
         start_time = time.time()
         for idx, pdf_path in enumerate(pdfs, start=1):
@@ -187,7 +200,12 @@ class OCRWorker(BaseWorker):
 
             if raw_text.strip():
                 self._emit(Signal.log(f"  Text extraction successful for {pdf_path.name}"))
-                res = self._name_detector.detect(raw_text, spans=spans)
+                res = self._name_detector.detect(
+                    raw_text,
+                    spans=spans,
+                    event_name=self._event_name,
+                    participant_names=self._participant_names,
+                )
                 if not res.method:
                     res.method = "text"
                 return res, "ok"
@@ -201,7 +219,11 @@ class OCRWorker(BaseWorker):
         if self._ocr_engine.is_available():
             self._emit(Signal.log(f"  No text found — running OCR on {pdf_path.name}"))
             ocr_result = self._ocr_engine.extract_text_from_pdf_page(pdf_path, 0)
-            res = self._name_detector.detect(ocr_result.text)
+            res = self._name_detector.detect(
+                ocr_result.text,
+                event_name=self._event_name,
+                participant_names=self._participant_names,
+            )
             if not res.method:
                 res.method = "ocr"
             return res, "ok"

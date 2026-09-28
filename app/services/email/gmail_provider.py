@@ -153,10 +153,11 @@ class GmailProvider(EmailProvider):
 
         # Alternative container for Plain Text + HTML (Required to pass Gmail spam filters)
         alt = MIMEMultipart("alternative")
+        html_body = self._format_html_body(message.body_html)
         plain_text = self._strip_html(message.body_html)
         
         alt.attach(MIMEText(plain_text, "plain", "utf-8"))
-        alt.attach(MIMEText(message.body_html, "html", "utf-8"))
+        alt.attach(MIMEText(html_body, "html", "utf-8"))
         
         msg.attach(alt)
 
@@ -176,6 +177,24 @@ class GmailProvider(EmailProvider):
                 logger.warning("Attachment not found: %s", attachment_path)
 
         return msg
+
+    @staticmethod
+    def _format_html_body(body: str) -> str:
+        """Convert plain text newlines into clean, beautiful HTML paragraphs and line breaks."""
+        if not body:
+            return ""
+        # If it already contains HTML block tags (<p>, <br>, <div>, <table>, <h1>..<h6>), leave as-is
+        if re.search(r'<(p|br|div|table|h[1-6]|span)\b', body, re.IGNORECASE):
+            return body
+
+        paragraphs = body.split("\n\n")
+        formatted_paragraphs = []
+        for p in paragraphs:
+            lines = p.split("\n")
+            formatted_lines = "<br>".join(lines)
+            formatted_paragraphs.append(f'<p style="margin: 0 0 12px 0; line-height: 1.6;">{formatted_lines}</p>')
+
+        return '<div style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; color: #222222; line-height: 1.6;">\n' + '\n'.join(formatted_paragraphs) + '\n</div>'
 
     @staticmethod
     def _strip_html(html_content: str) -> str:

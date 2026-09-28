@@ -24,23 +24,41 @@ from typing import Any
 # ---------------------------------------------------------------------------
 # Phrases that typically precede the participant name on a certificate
 # ---------------------------------------------------------------------------
+# Phrases that typically precede the participant name on a certificate
 NAME_KEYWORDS: list[str] = [
-    "presented to",
-    "awarded to",
-    "this is to certify that",
     "this certificate is proudly presented to",
     "this certificate is presented to",
-    "certify that",
+    "is proudly presented to",
+    "proudly presented to",
+    "this is to certify that",
     "is hereby awarded to",
     "is awarded to",
-    "participant",
-    "recipient",
-    "winner",
+    "presented to",
+    "awarded to",
+    "certify that",
     "is presented to",
     "congratulations to",
 ]
 
-# Common non-name phrases to ignore when finding max font size
+# Words that indicate a descriptive sentence or header, NOT a person's name
+SENTENCE_WORDS: set[str] = {
+    "towards", "building", "future", "through", "powered", "design", "recognition",
+    "creativity", "innovation", "commitment", "participating", "participated",
+    "participates", "organized", "jointly", "official", "results", "details",
+    "awarded", "presented", "certify", "hereby", "department", "science",
+    "humanities", "institute", "engineering", "management", "university",
+    "council", "society", "centre", "center", "laboratory", "college",
+    "school", "team", "appreciation", "effort", "enthusiasm", "initiative",
+    "meaningful", "successful", "congratulations", "warm", "regards",
+    "challenge", "certificate", "participation", "achievement", "completion",
+    "excellence", "award", "symposium", "workshop", "seminar", "conference",
+    "convenor", "president", "head", "july", "august", "september", "october",
+    "november", "december", "january", "february", "march", "april", "may", "june",
+    "is", "are", "was", "were", "been", "have", "has", "had", "with", "from",
+    "for", "and", "the", "this", "that", "these", "those", "which"
+}
+
+# Common non-name phrases to ignore when finding max font size or candidate names
 EXCLUDE_HEADER_PHRASES: list[str] = [
     "certificate",
     "participation",
@@ -57,6 +75,33 @@ EXCLUDE_HEADER_PHRASES: list[str] = [
     "workshop",
     "seminar",
     "conference",
+    "future x",
+    "design challenge",
+    "future x design",
+    "challenge",
+    "institute",
+    "university",
+    "management",
+    "engineering",
+    "technology",
+    "department",
+    "council",
+    "society",
+    "center",
+    "laboratory",
+    "science",
+    "humanities",
+    "iic",
+    "iem",
+    "uem",
+    "iifr",
+    "lab",
+    "innovacion",
+    "organized",
+    "jointly",
+    "convenor",
+    "president",
+    "head",
 ]
 
 # Words that should NOT be treated as names
@@ -71,7 +116,7 @@ REJECT_PATTERNS: list[str] = [
 class NameDetectionResult:
     detected_name: str = ""
     confidence: float = 0.0    # 0–100
-    method: str = ""           # "font_size", "keyword", "layout", "fallback", "failed"
+    method: str = ""           # "roster", "font_size", "keyword", "layout", "fallback", "failed"
     raw_text_used: str = ""
 
 
@@ -80,56 +125,72 @@ class NameDetector:
     Determines the participant's name from certificate text or text spans.
     """
 
-    def detect(self, raw_text: str, spans: list[dict[str, Any]] | None = None) -> NameDetectionResult:
+    def detect(
+        self,
+        raw_text: str,
+        spans: list[dict[str, Any]] | None = None,
+        event_name: str = "",
+        participant_names: list[str] | set[str] | None = None,
+    ) -> NameDetectionResult:
         """
-        Try all strategies in order and return the first successful result.
+        Try strategies in accurate priority order: Roster Match -> Keyword Proximity -> Font Size -> Layout -> Fallback.
 
         :param raw_text: Full text extracted from a certificate PDF.
         :param spans: Optional list of span dicts with 'text', 'size', 'font', 'bbox'.
+        :param event_name: Optional event name to exclude.
+        :param participant_names: Optional imported participant roster to match against.
         """
-        if spans:
-            res = self._font_size_strategy(spans)
-            if res and res.confidence >= 80.0:
-                return res
-
         if not raw_text or not raw_text.strip():
-            return NameDetectionResult(method="failed", confidence=0.0)
+            if spans:
+                raw_text = "\n".join(s.get("text", "") for s in spans)
+            else:
+                return NameDetectionResult(method="failed", confidence=0.0)
+
+        # Strategy 0: Imported Participant Roster Match (100% Accuracy)
+        if participant_names:
+            text_lower = raw_text.lower()
+            for p_name in participant_names:
+                p_name_clean = p_name.strip()
+                if p_name_clean and len(p_name_clean) >= 3 and p_name_clean.lower() in text_lower:
+                    return NameDetectionResult(
+                        detected_name=p_name_clean,
+                        confidence=100.0,
+                        method="roster",
+                        raw_text_used=p_name_clean,
+                    )
 
         lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
 
-        # Strategy 1: keyword proximity
-        result = self._keyword_strategy(lines)
+        # Strategy 1: Keyword Proximity FIRST
+        result = self._keyword_strategy(lines, event_name=event_name)
         if result:
             return result
 
-        # Strategy 2: font size fallback if available
+        # Strategy 2: Font Size Strategy
         if spans:
-            res = self._font_size_strategy(spans)
+            res = self._font_size_strategy(spans, event_name=event_name)
             if res:
                 return res
 
-        # Strategy 3: layout (longest non-keyword line)
-        result = self._layout_strategy(lines)
+        # Strategy 3: Layout
+        result = self._layout_strategy(lines, event_name=event_name)
         if result:
             return result
 
-        # Strategy 4: fallback
-        return self._fallback_strategy(lines)
+        # Strategy 4: Fallback
+        return self._fallback_strategy(lines, event_name=event_name)
 
     # -----------------------------------------------------------------------
     # Strategies
     # -----------------------------------------------------------------------
 
-    def _font_size_strategy(self, spans: list[dict[str, Any]]) -> NameDetectionResult | None:
+    def _font_size_strategy(self, spans: list[dict[str, Any]], event_name: str = "") -> NameDetectionResult | None:
         """Find the span with maximum font size that forms a valid name."""
         valid_spans = []
         for s in spans:
             text = s.get("text", "").strip()
             name = self._clean_name(text)
-            if not self._is_valid_name(name):
-                continue
-            lower = name.lower()
-            if any(ex in lower for ex in EXCLUDE_HEADER_PHRASES):
+            if not self._is_valid_name(name, event_name=event_name):
                 continue
             size = float(s.get("size", 0.0))
             valid_spans.append((name, size, text))
@@ -149,7 +210,7 @@ class NameDetector:
             raw_text_used=raw_text,
         )
 
-    def _keyword_strategy(self, lines: list[str]) -> NameDetectionResult | None:
+    def _keyword_strategy(self, lines: list[str], event_name: str = "") -> NameDetectionResult | None:
         text_lower = " ".join(lines).lower()
         for keyword in NAME_KEYWORDS:
             idx = text_lower.find(keyword)
@@ -164,7 +225,7 @@ class NameDetector:
                     break
             for candidate_line in lines[keyword_line_idx + 1: keyword_line_idx + 4]:
                 name = self._clean_name(candidate_line)
-                if name and self._is_valid_name(name):
+                if name and self._is_valid_name(name, event_name=event_name):
                     confidence = self._score_name(name, method="keyword")
                     return NameDetectionResult(
                         detected_name=name,
@@ -174,11 +235,11 @@ class NameDetector:
                     )
         return None
 
-    def _layout_strategy(self, lines: list[str]) -> NameDetectionResult | None:
+    def _layout_strategy(self, lines: list[str], event_name: str = "") -> NameDetectionResult | None:
         candidates = [
             (line, len(line))
             for line in lines
-            if self._is_valid_name(self._clean_name(line))
+            if self._is_valid_name(self._clean_name(line), event_name=event_name)
         ]
         if not candidates:
             return None
@@ -192,10 +253,10 @@ class NameDetector:
             raw_text_used=candidates[0][0],
         )
 
-    def _fallback_strategy(self, lines: list[str]) -> NameDetectionResult:
+    def _fallback_strategy(self, lines: list[str], event_name: str = "") -> NameDetectionResult:
         for line in lines:
             name = self._clean_name(line)
-            if name and self._is_valid_name(name):
+            if name and self._is_valid_name(name, event_name=event_name):
                 return NameDetectionResult(
                     detected_name=name,
                     confidence=50.0,
@@ -217,11 +278,18 @@ class NameDetector:
         return name
 
     @staticmethod
-    def _is_valid_name(name: str) -> bool:
+    def _is_valid_name(name: str, event_name: str = "") -> bool:
         if not name or len(name) < 3 or len(name) > 80:
             return False
+        lower = name.lower()
+        if any(ex in lower for ex in EXCLUDE_HEADER_PHRASES):
+            return False
+        if event_name:
+            for w in event_name.lower().split():
+                if len(w) > 3 and w in lower:
+                    return False
         for pattern in REJECT_PATTERNS:
-            if re.fullmatch(pattern, name.lower()):
+            if re.fullmatch(pattern, lower):
                 return False
         # Must contain at least one letter
         return bool(re.search(r"[a-zA-Z]", name))

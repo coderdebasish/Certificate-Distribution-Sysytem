@@ -78,8 +78,7 @@ class QueueBuilder:
                         break
 
             if not cert_path or not Path(cert_path).exists():
-                errors.append(f"{p.full_name}: Certificate file not found for email attachment.")
-                continue
+                cert_path = ""
 
             # Render placeholders
             context = self._engine.build_context(
