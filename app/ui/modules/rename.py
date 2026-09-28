@@ -25,6 +25,7 @@ from app.ui.components.data_table import DataTable, TAG_SUCCESS, TAG_WARNING, TA
 from app.ui.components.module_header import ModuleHeader
 from app.ui.components.pdf_viewer import PDFViewer
 from app.ui.components.dialogs import ConfirmDialog
+from app.ui.dialogs.zone_selector_dialog import ZoneSelectorDialog
 from app.utils.file_utils import sanitize_filename
 from app.workers.ocr_worker import OCRWorker
 from app.workers.rename_worker import RenameWorker, RenameJob
@@ -68,6 +69,8 @@ class RenameView:
         # Standalone in-memory dataset
         self._certificates: list[Certificate] = []
         self._cert_map: dict[str, Certificate] = {}  # filename -> Certificate
+        self._custom_zone: tuple[float, float, float, float] | None = None
+        self._current_sample_pdf: Path | None = None
 
         self._build_ui()
 
@@ -123,7 +126,7 @@ class RenameView:
 
         # Row 2: Output Directory
         out_row = ctk.CTkFrame(import_card, fg_color="transparent")
-        out_row.pack(fill="x", padx=16, pady=(4, 10))
+        out_row.pack(fill="x", padx=16, pady=(4, 6))
 
         ctk.CTkLabel(out_row, text="Output Directory:", font=(f.family, f.size_sm, "bold"), text_color=p.text_primary, width=130, anchor="w").pack(side="left")
         self._output_folder_var = ctk.StringVar(value="")
@@ -143,6 +146,39 @@ class RenameView:
 
         self._file_count_label = ctk.CTkLabel(out_row, text="", font=(f.family, f.size_xs), text_color=p.text_disabled, width=160, anchor="w")
         self._file_count_label.pack(side="left")
+
+        # Row 3: Name Position & Folder Zone
+        zone_row = ctk.CTkFrame(import_card, fg_color="transparent")
+        zone_row.pack(fill="x", padx=16, pady=(4, 10))
+
+        ctk.CTkLabel(zone_row, text="Name Position:", font=(f.family, f.size_sm, "bold"), text_color=p.text_primary, width=130, anchor="w").pack(side="left")
+
+        self._zone_badge = ctk.CTkLabel(
+            zone_row, text="🤖 Auto-Detect (Heuristic Mode)", font=(f.family, f.size_xs, "bold"),
+            text_color=p.text_secondary, anchor="w"
+        )
+        self._zone_badge.pack(side="left", fill="x", expand=True)
+
+        self._set_zone_btn = ctk.CTkButton(
+            zone_row, text="🎯 Set Name Area...", width=145, height=28,
+            fg_color=p.accent, hover_color=p.accent_hover, text_color=p.accent_text,
+            font=(f.family, f.size_xs, "bold"), command=self._open_zone_selector, state="disabled"
+        )
+        self._set_zone_btn.pack(side="left", padx=(0, 6))
+
+        self._test_zone_btn = ctk.CTkButton(
+            zone_row, text="⚡ Test Area", width=95, height=28,
+            fg_color=p.bg_secondary, hover_color=p.bg_hover, text_color=p.text_primary,
+            font=(f.family, f.size_xs), command=self._test_current_zone, state="disabled"
+        )
+        self._test_zone_btn.pack(side="left", padx=(0, 6))
+
+        self._clear_zone_btn = ctk.CTkButton(
+            zone_row, text="✕ Reset to Auto", width=110, height=28,
+            fg_color=p.bg_input, hover_color=p.bg_hover, text_color=p.text_disabled,
+            font=(f.family, f.size_xs), command=self._clear_custom_zone, state="disabled"
+        )
+        self._clear_zone_btn.pack(side="left")
 
         # Progress bar frame with Pause/Cancel controls and real-time ETA
         self._progress_frame = ctk.CTkFrame(self.frame, fg_color=p.bg_secondary, corner_radius=8)
@@ -299,9 +335,14 @@ class RenameView:
             if imp_dir.exists() and list(imp_dir.glob("*.pdf")):
                 self._source_folder_var.set(str(imp_dir))
                 self._output_folder_var.set(str(Path(self._app.active_project.project_dir) / "Renamed Certificates"))
-                count = len(list(imp_dir.glob("*.pdf")))
+                pdfs = list(imp_dir.glob("*.pdf"))
+                count = len(pdfs)
                 self._file_count_label.configure(text=f"  {count} staged PDF(s)", text_color=p.success)
                 self._analyze_btn.configure(state="normal")
+                self._set_zone_btn.configure(state="normal")
+                self._test_zone_btn.configure(state="normal")
+                self._current_sample_pdf = pdfs[0]
+                self._pdf_viewer.load(pdfs[0])
 
     # -----------------------------------------------------------------------
     # Directory & Session Controls
@@ -326,8 +367,17 @@ class RenameView:
         )
         if count > 0:
             self._analyze_btn.configure(state="normal")
+            self._set_zone_btn.configure(state="normal")
+            self._test_zone_btn.configure(state="normal")
+            self._current_sample_pdf = pdfs[0]
+            self._pdf_viewer.load(pdfs[0])
+            if self._custom_zone:
+                self._pdf_viewer.set_zone_overlay(self._custom_zone)
         else:
             self._analyze_btn.configure(state="disabled")
+            self._set_zone_btn.configure(state="disabled")
+            self._test_zone_btn.configure(state="disabled")
+            self._current_sample_pdf = None
 
     def _browse_output_folder(self) -> None:
         folder = fd.askdirectory(title="Select Output Folder for Renamed Certificates")
@@ -348,6 +398,11 @@ class RenameView:
         self._file_count_label.configure(text="")
         self._analyze_btn.configure(state="disabled", text="▶  Start Analysis")
 
+        self._clear_custom_zone()
+        self._current_sample_pdf = None
+        self._set_zone_btn.configure(state="disabled")
+        self._test_zone_btn.configure(state="disabled")
+
         for lbl in self._detail_rows.values():
             lbl.configure(text="—")
         self._edit_name_var.set("")
@@ -359,6 +414,81 @@ class RenameView:
         self._progress_frame.pack_forget()
         self._set_status("Session reset. Select a source folder to start.")
         self._summary_label.configure(text="")
+
+    # -----------------------------------------------------------------------
+    # Name Zone / Position Setup
+    # -----------------------------------------------------------------------
+
+    def _open_zone_selector(self) -> None:
+        sample_pdf = self._current_sample_pdf
+        if not sample_pdf or not sample_pdf.exists():
+            src_str = self._source_folder_var.get().strip()
+            if src_str:
+                src_path = Path(src_str)
+                pdfs = list(src_path.glob("*.pdf")) if src_path.exists() else []
+                if pdfs:
+                    sample_pdf = pdfs[0]
+                    self._current_sample_pdf = sample_pdf
+
+        if not sample_pdf or not sample_pdf.exists():
+            self._set_status("Please select a folder containing certificate PDFs first.")
+            return
+
+        p_names = []
+        if hasattr(self._app, "participant_repo") and getattr(self._app, "active_project", None):
+            parts = self._app.participant_repo.get_all(self._app.active_project.id)
+            p_names = [p.full_name for p in parts if p.full_name]
+
+        def _on_apply(zone: tuple[float, float, float, float]) -> None:
+            self._custom_zone = zone
+            x0, y0, x1, y1 = zone
+            self._zone_badge.configure(
+                text=f"🎯 Custom Area Active: [L:{int(x0*100)}% T:{int(y0*100)}% R:{int(x1*100)}% B:{int(y1*100)}%]",
+                text_color=self._palette.accent,
+            )
+            self._clear_zone_btn.configure(state="normal", text_color=self._palette.text_primary)
+            self._pdf_viewer.set_zone_overlay(zone)
+            self._set_status(f"Name Area locked for this folder. Ready to analyze.")
+
+        ZoneSelectorDialog(
+            parent=self.frame.winfo_toplevel(),
+            pdf_path=sample_pdf,
+            initial_zone=self._custom_zone,
+            on_apply=_on_apply,
+            palette=self._palette,
+            fonts=self._fonts,
+            participant_names=p_names,
+        )
+
+    def _clear_custom_zone(self) -> None:
+        self._custom_zone = None
+        self._zone_badge.configure(
+            text="🤖 Auto-Detect (Heuristic Mode)",
+            text_color=self._palette.text_secondary,
+        )
+        self._clear_zone_btn.configure(state="disabled", text_color=self._palette.text_disabled)
+        self._pdf_viewer.set_zone_overlay(None)
+        self._set_status("Name Area cleared. Using Auto-Detect mode for this folder.")
+
+    def _test_current_zone(self) -> None:
+        if not self._current_sample_pdf or not self._current_sample_pdf.exists():
+            self._set_status("No certificate preview loaded to test.")
+            return
+
+        if self._custom_zone:
+            extracted = self._pdf_viewer.extract_zone_text(self._custom_zone)
+            if extracted:
+                from app.services.ocr.name_detector import NameDetector
+                p_names = []
+                if hasattr(self._app, "participant_repo") and getattr(self._app, "active_project", None):
+                    parts = self._app.participant_repo.get_all(self._app.active_project.id)
+                    p_names = [p.full_name for p in parts if p.full_name]
+                res = NameDetector().detect_from_zone(extracted, participant_names=p_names)
+                self._set_status(f"⚡ Extracted from {self._current_sample_pdf.name}: \"{res.detected_name}\" ({res.confidence:.0f}% confidence)")
+            else:
+                self._set_status(f"⚡ Box is empty on {self._current_sample_pdf.name}. If scanned image, OCR will be run during analysis.")
+        else:
+            self._set_status("Currently in Auto-Detect mode. Click 'Set Name Area...' to define an exact box for this folder.")
 
     # -----------------------------------------------------------------------
     # Analysis Workflow
@@ -407,6 +537,7 @@ class RenameView:
             ocr_threshold=getattr(self._app.settings, "ocr_confidence_threshold", 70.0),
             event_name=self._app.active_project.event_name if getattr(self._app, "active_project", None) else "",
             participant_names=p_names,
+            name_zone=self._custom_zone,
         )
         self._ocr_worker.start()
 
@@ -657,7 +788,10 @@ class RenameView:
         if folder:
             pdf_path = Path(folder) / filename
             if pdf_path.exists():
+                self._current_sample_pdf = pdf_path
                 self._pdf_viewer.load(pdf_path)
+                if self._custom_zone:
+                    self._pdf_viewer.set_zone_overlay(self._custom_zone)
 
     def _on_row_double_click(self, row_id: str, values: dict) -> None:
         self._edit_entry.focus()
@@ -709,7 +843,8 @@ class RenameView:
             elif method_str == "failed":
                 status = CertificateStatus.FAILED
 
-            method_enum = ExtractionMethod.TEXT if method_str in ("text", "font_size", "keyword", "layout") else \
+            method_enum = ExtractionMethod.ZONE if method_str in ("zone", "roster_zone", "zone_ocr") else \
+                          ExtractionMethod.TEXT if method_str in ("text", "font_size", "keyword", "layout", "roster") else \
                           ExtractionMethod.OCR if method_str == "ocr" else ExtractionMethod.FAILED
 
             cert = Certificate(
@@ -738,6 +873,8 @@ class RenameView:
             # LIVE PREVIEW UPDATE: Load currently analyzed PDF into viewer automatically
             if file_path and Path(file_path).exists():
                 self._pdf_viewer.load(Path(file_path))
+                if self._custom_zone:
+                    self._pdf_viewer.set_zone_overlay(self._custom_zone)
 
         elif signal.type == SignalType.CERTIFICATE_RENAMED:
             cert_id = signal.payload.get("cert_id")
