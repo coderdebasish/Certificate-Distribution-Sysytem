@@ -51,6 +51,7 @@ class PDFViewer(ctk.CTkFrame):
         self._total_pages = 0
         self._zoom = 1.0
         self._ctk_img: ctk.CTkImage | None = None
+        self._zone_overlay: tuple[float, float, float, float] | None = None
 
         self._build()
 
@@ -202,6 +203,25 @@ class PDFViewer(ctk.CTkFrame):
     # Render
     # -----------------------------------------------------------------------
 
+    def set_zone_overlay(self, zone: tuple[float, float, float, float] | None) -> None:
+        """Set or clear a normalized (0-1) bounding box overlay to display on the PDF."""
+        self._zone_overlay = zone
+        if self._doc:
+            self._render()
+
+    def get_zone_overlay(self) -> tuple[float, float, float, float] | None:
+        return self._zone_overlay
+
+    def extract_zone_text(self, zone: tuple[float, float, float, float]) -> str:
+        """Extract text from the specified normalized zone for the current page."""
+        if not self._doc or not _PYMUPDF_AVAILABLE:
+            return ""
+        page = self._doc[self._page_number]
+        pw, ph = page.rect.width, page.rect.height
+        x0, y0, x1, y1 = zone
+        clip = fitz.Rect(max(0.0, x0 * pw), max(0.0, y0 * ph), min(pw, x1 * pw), min(ph, y1 * ph))
+        return page.get_text("text", clip=clip).strip()
+
     def _render(self) -> None:
         if not self._doc or not _PYMUPDF_AVAILABLE:
             return
@@ -209,6 +229,24 @@ class PDFViewer(ctk.CTkFrame):
         mat = fitz.Matrix(2.0, 2.0)  # Render crisp high-DPI image
         pix = page.get_pixmap(matrix=mat, alpha=False)
         img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+
+        if self._zone_overlay:
+            try:
+                from PIL import ImageDraw
+                overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+                draw = ImageDraw.Draw(overlay)
+                x0, y0, x1, y1 = self._zone_overlay
+                bx0 = int(x0 * img.width)
+                by0 = int(y0 * img.height)
+                bx1 = int(x1 * img.width)
+                by1 = int(y1 * img.height)
+                draw.rectangle([bx0, by0, bx1, by1], fill=(59, 130, 246, 45), outline=(59, 130, 246, 230), width=4)
+                tag_y0 = max(0, by0 - 20)
+                draw.rectangle([bx0, tag_y0, bx0 + 85, by0], fill=(59, 130, 246, 230))
+                draw.text((bx0 + 5, tag_y0 + 2), "NAME ZONE", fill=(255, 255, 255, 255))
+                img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
+            except Exception as e:
+                logger.warning("Failed to draw zone overlay on preview: %s", e)
 
         disp_w = max(50, int(page.rect.width * self._zoom))
         disp_h = max(50, int(page.rect.height * self._zoom))

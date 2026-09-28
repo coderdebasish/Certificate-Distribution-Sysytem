@@ -15,9 +15,11 @@ from pathlib import Path
 class ExtractionMethod(str, Enum):
     """How the participant name was extracted from the PDF."""
     TEXT = "text"          # PyMuPDF / pdfplumber selectable text
-    OCR = "ocr"            # PaddleOCR
+    OCR = "ocr"            # PaddleOCR / Tesseract
+    ZONE = "zone"          # Targeted user-defined Name Zone (ROI)
     MANUAL = "manual"      # User manually typed / corrected the name
     FAILED = "failed"      # Could not extract
+
 
 
 class CertificateStatus(str, Enum):

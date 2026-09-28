@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import queue
+import tempfile
 import time
 from pathlib import Path
 from typing import Callable, Optional
@@ -44,6 +45,7 @@ class OCRWorker(BaseWorker):
         ocr_threshold: float = 70.0,
         event_name: str = "",
         participant_names: list[str] | set[str] | None = None,
+        name_zone: tuple[float, float, float, float] | None = None,
     ) -> None:
         super().__init__(signal_queue=signal_queue)
         folder_path = pdf_folder or source_folder or "."
@@ -56,6 +58,7 @@ class OCRWorker(BaseWorker):
         self._pdf_paths = pdf_paths
         self._event_name = event_name
         self._participant_names = list(participant_names) if participant_names else []
+        self._name_zone = name_zone
 
     def _run(self) -> None:
         pdfs = self._pdf_paths or sorted(self._source_folder.glob("*.pdf"))
@@ -114,7 +117,8 @@ class OCRWorker(BaseWorker):
                     elif result.method == "failed":
                         status = CertificateStatus.FAILED
                     
-                    method_enum = ExtractionMethod.TEXT if result.method in ("text", "font_size", "keyword", "layout") else \
+                    method_enum = ExtractionMethod.ZONE if result.method in ("zone", "roster_zone", "zone_ocr") else \
+                                  ExtractionMethod.TEXT if result.method in ("text", "font_size", "keyword", "layout", "roster") else \
                                   ExtractionMethod.OCR if result.method == "ocr" else ExtractionMethod.FAILED
                     
                     existing = repo.get_by_filename(self._project_id, pdf_path.name)
@@ -176,7 +180,48 @@ class OCRWorker(BaseWorker):
             if doc.is_encrypted:
                 doc.close()
                 return NameDetectionResult(method="encrypted", confidence=0.0), "encrypted"
-            
+
+            # Priority 0: Custom Name Zone (User-defined ROI for this batch)
+            if self._name_zone and len(doc) > 0:
+                page = doc[0]
+                pw, ph = page.rect.width, page.rect.height
+                x0, y0, x1, y1 = self._name_zone
+                clip = fitz.Rect(
+                    max(0.0, x0 * pw),
+                    max(0.0, y0 * ph),
+                    min(pw, x1 * pw),
+                    min(ph, y1 * ph),
+                )
+                zone_text = page.get_text("text", clip=clip).strip()
+                if zone_text:
+                    doc.close()
+                    res = self._name_detector.detect_from_zone(
+                        zone_text,
+                        participant_names=self._participant_names,
+                    )
+                    return res, "ok"
+
+                # If no selectable vector text in zone, attempt targeted crop OCR on the isolated zone
+                if self._ocr_engine and self._ocr_engine.is_available():
+                    try:
+                        mat = fitz.Matrix(2.5, 2.5)
+                        pix = page.get_pixmap(matrix=mat, clip=clip)
+                        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                            tmp_path = Path(tmp.name)
+                        pix.save(str(tmp_path))
+                        ocr_res = self._ocr_engine.extract_text_from_image(tmp_path)
+                        tmp_path.unlink(missing_ok=True)
+                        if ocr_res.text.strip():
+                            doc.close()
+                            res = self._name_detector.detect_from_zone(
+                                ocr_res.text,
+                                participant_names=self._participant_names,
+                            )
+                            res.method = "zone_ocr"
+                            return res, "ok"
+                    except Exception as e:
+                        logger.warning("Zone crop OCR failed on %s: %s", pdf_path, e)
+
             raw_text_lines = []
             spans = []
             for page in doc:

@@ -16,9 +16,13 @@ Returns the detected name and a confidence score (0–100).
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from typing import Any
+
+logger = logging.getLogger(__name__)
+
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +140,60 @@ class NameDetector:
     """
     Determines the participant's name from certificate text or text spans.
     """
+
+    def detect_from_zone(
+        self,
+        raw_text: str,
+        participant_names: list[str] | set[str] | None = None,
+    ) -> NameDetectionResult:
+        """
+        Extract the participant name directly from user-selected zone text.
+
+        Cleans whitespace and punctuation, and cross-references with participant roster
+        via exact or fuzzy matching for 100% confidence.
+        """
+        if not raw_text or not raw_text.strip():
+            return NameDetectionResult(method="failed", confidence=0.0)
+
+        cleaned_lines = [self._clean_name(line) for line in raw_text.splitlines() if self._clean_name(line)]
+        candidate = " ".join(cleaned_lines)
+        candidate = self._clean_name(candidate)
+
+        if not candidate:
+            return NameDetectionResult(method="failed", confidence=0.0)
+
+        # Cross-reference with imported roster if available
+        if participant_names:
+            try:
+                from rapidfuzz import fuzz, process
+                names_list = [p.strip() for p in participant_names if p and p.strip()]
+                # Exact or substring match first
+                for p_name in names_list:
+                    if p_name.lower() == candidate.lower() or p_name.lower() in candidate.lower() or candidate.lower() in p_name.lower():
+                        return NameDetectionResult(
+                            detected_name=p_name,
+                            confidence=100.0,
+                            method="roster_zone",
+                            raw_text_used=raw_text.strip(),
+                        )
+                # Fuzzy match
+                match = process.extractOne(candidate, names_list, scorer=fuzz.token_sort_ratio)
+                if match and match[1] >= 75:
+                    return NameDetectionResult(
+                        detected_name=match[0],
+                        confidence=round(float(match[1]), 1),
+                        method="roster_zone",
+                        raw_text_used=raw_text.strip(),
+                    )
+            except Exception as e:
+                logger.warning("Fuzzy roster match in zone failed: %s", e)
+
+        return NameDetectionResult(
+            detected_name=candidate,
+            confidence=98.0,
+            method="zone",
+            raw_text_used=raw_text.strip(),
+        )
 
     def detect(
         self,
