@@ -88,7 +88,22 @@ class SendingView:
             rf, values=["Every 15 emails", "Every 25 emails", "Every 50 emails", "Disabled"], variable=self._batch_size_var,
             width=130, height=28, font=(f.family, f.size_xs), fg_color=p.bg_input, border_color=p.border, text_color=p.text_primary
         )
-        self._batch_size_combo.pack(side="left", padx=(0, 16))
+        ctk.CTkLabel(rf, text="Mode:", font=(f.family, f.size_xs), text_color=p.text_secondary).pack(side="left", padx=(0, 4))
+        self._mode_var = ctk.StringVar(value="👤 Individual (Default)")
+        self._mode_combo = ctk.CTkComboBox(
+            rf, values=["👤 Individual (Default)", "👥 Team Leader Mode"], variable=self._mode_var,
+            width=175, height=28, font=(f.family, f.size_xs), fg_color=p.bg_input, border_color=p.border, text_color=p.text_primary,
+            command=self._on_mode_changed
+        )
+        self._mode_combo.pack(side="left", padx=(0, 10))
+
+        self._rebuild_btn = ctk.CTkButton(
+            rf, text="🔄 Refresh Queue", width=110, height=28,
+            font=(f.family, f.size_xs), fg_color=p.bg_secondary, hover_color=p.border,
+            border_width=1, border_color=p.border, text_color=p.text_primary,
+            command=lambda: self.load_queue_from_db(force_rebuild=True)
+        )
+        self._rebuild_btn.pack(side="left", padx=(0, 16))
 
         ctk.CTkLabel(rf, text="Provider: Gmail SMTP (TLS 587)", font=(f.family, f.size_xs, "bold"), text_color=p.success).pack(side="right")
 
@@ -149,10 +164,18 @@ class SendingView:
     # DB Integration & Queue Auto-Building
     # -----------------------------------------------------------------------
 
+    def _on_mode_changed(self, choice: str = "") -> None:
+        mode_text = choice or self._mode_var.get()
+        if "Team" in mode_text:
+            self._append_log("👥 Switched to Team Leader Mode (all member certificates attached to leader email).")
+        else:
+            self._append_log("👤 Switched to Individual Mode (each participant receives their own certificate).")
+        self.load_queue_from_db(force_rebuild=True)
+
     def on_project_loaded(self, project) -> None:
         self.load_queue_from_db()
 
-    def load_queue_from_db(self) -> None:
+    def load_queue_from_db(self, force_rebuild: bool = False) -> None:
         self._queue_table.clear()
         if not self._app.active_project or not self._app.queue_repo:
             return
@@ -160,8 +183,13 @@ class SendingView:
         items = self._app.queue_repo.get_all(self._app.active_project.id)
         participants = self._app.participant_repo.get_all(self._app.active_project.id) if self._app.participant_repo else []
 
-        # Auto-generate queue if currently empty or participant count changed
-        if (not items or len(items) != len(participants)) and participants:
+        is_team_mode = "Team" in self._mode_var.get()
+
+        # Auto-generate queue if currently empty, or force_rebuild requested,
+        # or in individual mode if participant count changed.
+        needs_rebuild = force_rebuild or (not items and participants) or (not is_team_mode and len(items) != len(participants) and participants)
+
+        if needs_rebuild and participants:
             self._app.queue_repo.clear(self._app.active_project.id)
             if participants:
                 # 1. Ensure email template exists in DB
@@ -182,14 +210,18 @@ class SendingView:
                 certs = {c.id: c for c in self._app.certificate_repo.get_all(self._app.active_project.id)} if self._app.certificate_repo else {}
 
                 builder = QueueBuilder()
-                new_items, errors = builder.build(self._app.active_project, participants, certs, active_tmpl)
+                if is_team_mode:
+                    new_items, errors = builder.build_team_queue(self._app.active_project, participants, certs, active_tmpl)
+                else:
+                    new_items, errors = builder.build(self._app.active_project, participants, certs, active_tmpl)
 
                 # 3. Ensure every item has a valid certificate_id in DB (foreign key safety)
                 if self._app.certificate_repo:
                     for item in new_items:
                         if item.certificate_id == 0:
-                            if item.attachment_path:
-                                p_path = Path(item.attachment_path)
+                            first_att = item.attachment_path.split(";")[0] if item.attachment_path else ""
+                            if first_att:
+                                p_path = Path(first_att)
                                 c_obj = Certificate(
                                     project_id=self._app.active_project.id,
                                     original_filename=p_path.name,
@@ -234,17 +266,35 @@ class SendingView:
             p = self._app.participant_repo.get_by_id(item.participant_id) if self._app.participant_repo else None
             p_name = p.full_name if p else item.to_name or f"PID#{item.participant_id}"
 
+            # Format attachment display (single vs multiple)
+            if item.attachment_path:
+                raw_atts = [Path(p_str.strip()).name for p_str in item.attachment_path.split(";") if p_str.strip()]
+                if len(raw_atts) > 1:
+                    att_str = f"📎 {len(raw_atts)} PDFs ({raw_atts[0]}, ...)"
+                elif len(raw_atts) == 1:
+                    att_str = raw_atts[0]
+                else:
+                    att_str = "—"
+            else:
+                att_str = "—"
+
+            # In team mode, show team tag if applicable
+            disp_name = p_name
+            if p and p.team_name:
+                disp_name = f"{p_name} 👑 [{p.team_name}]" if p.is_team_leader else f"{p_name} [{p.team_name}]"
+
             self._queue_table.add_row({
                 "Pos": str(item.queue_position),
-                "Participant Name": p_name,
+                "Participant Name": disp_name,
                 "To Email": item.to_email,
-                "Attachment": Path(item.attachment_path).name if item.attachment_path else "—",
+                "Attachment": att_str,
                 "Attempts": str(item.attempts),
                 "Status": item.status.value.title(),
             }, tag=tag)
 
         tot = len(items)
-        self._queue_stats_lbl.configure(text=f"Total: {tot}  |  Sent: {sent}  |  Failed: {failed}  |  Pending: {pending}")
+        mode_label = "Team Mode" if is_team_mode else "Individual Mode"
+        self._queue_stats_lbl.configure(text=f"[{mode_label}] Total: {tot}  |  Sent: {sent}  |  Failed: {failed}  |  Pending: {pending}")
 
     # -----------------------------------------------------------------------
     # Actions & Worker Dispatch

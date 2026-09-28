@@ -98,7 +98,7 @@ class ParticipantsView:
         ctk.CTkButton(self._side_panel, text="✕", width=28, height=28, fg_color="transparent", hover_color=p.bg_hover, text_color=p.text_secondary, command=self._hide_side_panel).place(relx=1.0, x=-8, y=8, anchor="ne")
 
         self._profile_fields: dict[str, ctk.CTkLabel] = {}
-        for field in ["ID", "Name", "Email", "Phone", "College", "Department", "Designation", "Match Status", "Email Status"]:
+        for field in ["ID", "Name", "Email", "Phone", "College", "Department", "Designation", "Team", "Leader", "Match Status", "Email Status"]:
             row = ctk.CTkFrame(self._side_panel, fg_color="transparent")
             row.pack(fill="x", padx=14, pady=2)
             ctk.CTkLabel(row, text=f"{field}:", font=(f.family, f.size_xs), text_color=p.text_secondary, width=90, anchor="w").pack(side="left")
@@ -238,8 +238,25 @@ class ParticipantsView:
         mapping = {"ID": "ID", "Name": "Full Name", "Email": "Email", "College": "College", "Match Status": "Match", "Email Status": "Email Status"}
         for field, col in mapping.items():
             self._profile_fields[field].configure(text=values.get(col, "—"))
-        for field in ["Phone", "Department", "Designation"]:
-            self._profile_fields[field].configure(text="—")
+
+        pid_str = values.get("ID", "")
+        p_obj = None
+        if self._app.participant_repo and pid_str.startswith("PID"):
+            try:
+                pid = int(pid_str.replace("PID", ""))
+                p_obj = self._app.participant_repo.get_by_id(pid)
+            except Exception:
+                pass
+
+        if p_obj:
+            self._profile_fields["Phone"].configure(text=p_obj.phone or "—")
+            self._profile_fields["Department"].configure(text=p_obj.department or "—")
+            self._profile_fields["Designation"].configure(text=p_obj.designation or "—")
+            self._profile_fields["Team"].configure(text=p_obj.team_name or "—")
+            self._profile_fields["Leader"].configure(text="Yes 👑" if p_obj.is_team_leader else "No")
+        else:
+            for field in ["Phone", "Department", "Designation", "Team", "Leader"]:
+                self._profile_fields[field].configure(text="—")
 
     def _show_side_panel(self) -> None:
         if not self._detail_visible:
@@ -253,8 +270,48 @@ class ParticipantsView:
 
     def _edit_selected(self) -> None:
         sel = self._table.get_selected()
-        if sel:
-            ParticipantFormDialog(self.frame.winfo_toplevel(), self._palette, self._fonts, initial_values=sel[0], on_save=self._on_participant_saved)
+        if not sel or not self._app.participant_repo:
+            return
+
+        row_data = dict(sel[0])
+        pid_str = row_data.get("ID", "")
+        p_obj = None
+        if pid_str.startswith("PID"):
+            try:
+                pid = int(pid_str.replace("PID", ""))
+                p_obj = self._app.participant_repo.get_by_id(pid)
+            except Exception:
+                pass
+
+        init_vals = {
+            "full_name": p_obj.full_name if p_obj else row_data.get("Full Name", ""),
+            "email": p_obj.email if p_obj else row_data.get("Email", ""),
+            "phone": p_obj.phone if p_obj else "",
+            "college": p_obj.college if p_obj else row_data.get("College", ""),
+            "department": p_obj.department if p_obj else "",
+            "designation": p_obj.designation if p_obj else "",
+            "team_name": p_obj.team_name if p_obj else "",
+            "is_team_leader": p_obj.is_team_leader if p_obj else False,
+        }
+
+        def _on_save(values: dict):
+            if p_obj and self._app.participant_repo:
+                p_obj.full_name = values["full_name"]
+                p_obj.email = values["email"]
+                p_obj.phone = values.get("phone", "")
+                p_obj.college = values.get("college", "")
+                p_obj.department = values.get("department", "")
+                p_obj.designation = values.get("designation", "")
+                p_obj.team_name = values.get("team_name", "")
+                p_obj.is_team_leader = bool(values.get("is_team_leader", False))
+                self._app.participant_repo.update(p_obj)
+            else:
+                self._on_participant_saved(values)
+            self.load_participants_from_db()
+            if pid_str:
+                self._populate_side_panel({"ID": pid_str, "Full Name": values["full_name"], "Email": values["email"], "College": values.get("college", "")})
+
+        ParticipantFormDialog(self.frame.winfo_toplevel(), self._palette, self._fonts, initial_values=init_vals, on_save=_on_save)
 
     def _delete_selected(self) -> None:
         from app.ui.components.dialogs import ConfirmDialog
@@ -278,6 +335,8 @@ class ParticipantsView:
                 college=values.get("college", ""),
                 department=values.get("department", ""),
                 designation=values.get("designation", ""),
+                team_name=values.get("team_name", ""),
+                is_team_leader=bool(values.get("is_team_leader", False)),
             )
             self._app.participant_repo.insert(p)
             self.load_participants_from_db()
@@ -322,6 +381,7 @@ class ParticipantFormDialog(ctk.CTkToplevel):
             ("College",     "college",      False),
             ("Department",  "department",   False),
             ("Designation", "designation",  False),
+            ("Team / Group", "team_name",   False),
         ]
 
         ctk.CTkLabel(self, text="Participant Details", font=(f.family, f.size_lg, "bold"), text_color=p.text_primary).pack(padx=24, pady=(20, 4))
@@ -336,6 +396,16 @@ class ParticipantFormDialog(ctk.CTkToplevel):
             self._vars[key] = var
             ctk.CTkEntry(row, textvariable=var, width=260, height=32, fg_color=p.bg_tertiary, text_color=p.text_primary, font=(f.family, f.size_sm)).pack(side="left", padx=8)
 
+        # Leader Checkbox
+        leader_row = ctk.CTkFrame(form, fg_color="transparent")
+        leader_row.pack(fill="x", pady=4)
+        self._leader_var = ctk.BooleanVar(value=bool(initial_values.get("is_team_leader", False)) if initial_values else False)
+        ctk.CTkCheckBox(
+            leader_row, text="👑 Is Team Leader", variable=self._leader_var,
+            font=(f.family, f.size_sm), text_color=p.text_primary,
+            fg_color=p.accent, hover_color=p.accent
+        ).pack(side="left", padx=(118, 0))
+
         self._error_label = ctk.CTkLabel(self, text="", font=(f.family, f.size_xs), text_color=p.error)
         self._error_label.pack(pady=(4, 0))
 
@@ -344,7 +414,7 @@ class ParticipantFormDialog(ctk.CTkToplevel):
         ctk.CTkButton(btn_row, text="Cancel", width=110, fg_color="transparent", border_width=1, text_color=p.text_primary, command=self.destroy).pack(side="left", padx=4)
         ctk.CTkButton(btn_row, text="Save", width=110, fg_color=p.accent, command=self._save).pack(side="left", padx=4)
 
-        self.geometry("460x440")
+        self.geometry("460x510")
 
     def _save(self) -> None:
         name = self._vars["full_name"].get().strip()
@@ -356,6 +426,7 @@ class ParticipantFormDialog(ctk.CTkToplevel):
             self._error_label.configure(text="A valid email address is required.")
             return
         values = {key: var.get().strip() for key, var in self._vars.items()}
+        values["is_team_leader"] = self._leader_var.get()
         if self._on_save:
             self._on_save(values)
         self.destroy()

@@ -309,6 +309,7 @@ class ParticipantEditDialog(ctk.CTkToplevel):
             ("college", "College / Institution", self._data.get("college", "")),
             ("department", "Department", self._data.get("department", "")),
             ("designation", "Designation", self._data.get("designation", "")),
+            ("team_name", "Team / Group Name", self._data.get("team_name", "")),
         ]
 
         for key, label_text, default_val in fields:
@@ -323,6 +324,14 @@ class ParticipantEditDialog(ctk.CTkToplevel):
             entry.insert(0, default_val)
             entry.pack(fill="x")
             self._entries[key] = entry
+
+        # Leader Checkbox
+        self._leader_var = ctk.BooleanVar(value=bool(self._data.get("is_team_leader", False)))
+        ctk.CTkCheckBox(
+            form_frame, text="👑 Is Team Leader", variable=self._leader_var,
+            font=(f.family, f.size_xs), text_color=p.text_primary,
+            fg_color=p.accent, hover_color=p.accent
+        ).pack(anchor="w", pady=(6, 2))
 
         btn_row = ctk.CTkFrame(self, fg_color="transparent")
         btn_row.pack(padx=24, pady=(16, 20))
@@ -350,6 +359,8 @@ class ParticipantEditDialog(ctk.CTkToplevel):
             "college": self._entries["college"].get().strip(),
             "department": self._entries["department"].get().strip(),
             "designation": self._entries["designation"].get().strip(),
+            "team_name": self._entries["team_name"].get().strip(),
+            "is_team_leader": self._leader_var.get(),
         }
         self.destroy()
 

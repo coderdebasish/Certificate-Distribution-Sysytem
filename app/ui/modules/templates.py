@@ -28,6 +28,9 @@ _PLACEHOLDERS = [
     ("{department}", "Participant's department"),
     ("{designation}", "Participant's role/designation"),
     ("{date}", "Current formatted date"),
+    ("{team_name}", "Team or group name"),
+    ("{leader_name}", "Team leader's name"),
+    ("{team_members}", "List of team member names"),
 ]
 
 

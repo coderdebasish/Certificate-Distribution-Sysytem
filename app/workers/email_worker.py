@@ -109,7 +109,11 @@ class EmailWorker(BaseWorker):
 
                 if p_repo and item.participant_id:
                     try:
-                        p_repo.mark_email_sent(item.participant_id)
+                        p = p_repo.get_by_id(item.participant_id)
+                        if p and p.team_name:
+                            p_repo.mark_team_emails_sent(p.project_id, p.team_name)
+                        else:
+                            p_repo.mark_email_sent(item.participant_id)
                     except Exception as exc:
                         logger.error("Failed to mark participant %d sent in DB: %s", item.participant_id, exc)
 
@@ -135,7 +139,11 @@ class EmailWorker(BaseWorker):
 
                 if p_repo and item.participant_id:
                     try:
-                        p_repo.mark_email_failed(item.participant_id, err_text)
+                        p = p_repo.get_by_id(item.participant_id)
+                        if p and p.team_name:
+                            p_repo.mark_team_emails_failed(p.project_id, p.team_name, err_text)
+                        else:
+                            p_repo.mark_email_failed(item.participant_id, err_text)
                     except Exception as exc:
                         logger.error("Failed to mark participant %d failed in DB: %s", item.participant_id, exc)
 
