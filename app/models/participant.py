@@ -61,6 +61,8 @@ class Participant:
     designation: str = ""
     certificate_type: str = ""
     remarks: str = ""
+    team_name: str = ""                 # Optional team/group name (e.g. for Hackathons)
+    is_team_leader: bool = False        # True if this participant is the team leader
 
     # -----------------------------------------------------------------------
     # Assignment & status

@@ -38,13 +38,13 @@ class ParticipantRepository:
                 INSERT INTO participants (
                     internal_id, project_id, full_name, email, phone,
                     college, department, designation, certificate_type,
-                    remarks, certificate_id, match_status, match_confidence,
+                    remarks, team_name, is_team_leader, certificate_id, match_status, match_confidence,
                     email_status, email_attempts, email_error, is_deleted,
                     import_source, created_at, updated_at
                 ) VALUES (
                     :internal_id, :project_id, :full_name, :email, :phone,
                     :college, :department, :designation, :certificate_type,
-                    :remarks, :certificate_id, :match_status, :match_confidence,
+                    :remarks, :team_name, :is_team_leader, :certificate_id, :match_status, :match_confidence,
                     :email_status, :email_attempts, :email_error, :is_deleted,
                     :import_source, :created_at, :updated_at
                 )
@@ -106,6 +106,28 @@ class ParticipantRepository:
                 (project_id,),
             ).fetchone()[0]
 
+    def get_by_team(self, project_id: int, team_name: str) -> list[Participant]:
+        """Fetch all participants in a team, leaders first."""
+        sql = """
+            SELECT * FROM participants
+            WHERE project_id = ? AND team_name = ? AND is_deleted = 0
+            ORDER BY is_team_leader DESC, id ASC
+        """
+        with self._db.read() as cur:
+            rows = cur.execute(sql, (project_id, team_name)).fetchall()
+        return [self._from_row(r) for r in rows]
+
+    def get_all_teams(self, project_id: int) -> list[str]:
+        """Return distinct non-empty team names in project."""
+        sql = """
+            SELECT DISTINCT team_name FROM participants
+            WHERE project_id = ? AND team_name != '' AND is_deleted = 0
+            ORDER BY team_name
+        """
+        with self._db.read() as cur:
+            rows = cur.execute(sql, (project_id,)).fetchall()
+        return [r["team_name"] for r in rows]
+
     # -----------------------------------------------------------------------
     # Update
     # -----------------------------------------------------------------------
@@ -124,6 +146,8 @@ class ParticipantRepository:
                     designation = :designation,
                     certificate_type = :certificate_type,
                     remarks = :remarks,
+                    team_name = :team_name,
+                    is_team_leader = :is_team_leader,
                     certificate_id = :certificate_id,
                     match_status = :match_status,
                     match_confidence = :match_confidence,
@@ -158,6 +182,35 @@ class ParticipantRepository:
                 WHERE id = ?
                 """,
                 (EmailStatus.FAILED, error, datetime.now(), participant_id),
+            )
+
+    def mark_team_emails_sent(self, project_id: int, team_name: str) -> None:
+        """Mark all participants in a team as sent."""
+        if not team_name:
+            return
+        with self._db.transaction() as cur:
+            cur.execute(
+                """
+                UPDATE participants
+                SET email_status = ?, email_sent_at = ?, updated_at = ?
+                WHERE project_id = ? AND team_name = ? AND is_deleted = 0
+                """,
+                (EmailStatus.SENT, datetime.now(), datetime.now(), project_id, team_name),
+            )
+
+    def mark_team_emails_failed(self, project_id: int, team_name: str, error: str) -> None:
+        """Mark all participants in a team as failed."""
+        if not team_name:
+            return
+        with self._db.transaction() as cur:
+            cur.execute(
+                """
+                UPDATE participants
+                SET email_status = ?, email_error = ?,
+                    email_attempts = email_attempts + 1, updated_at = ?
+                WHERE project_id = ? AND team_name = ? AND is_deleted = 0
+                """,
+                (EmailStatus.FAILED, error, datetime.now(), project_id, team_name),
             )
 
     # -----------------------------------------------------------------------
@@ -196,6 +249,8 @@ class ParticipantRepository:
             "designation": p.designation,
             "certificate_type": p.certificate_type,
             "remarks": p.remarks,
+            "team_name": p.team_name,
+            "is_team_leader": int(p.is_team_leader),
             "certificate_id": p.certificate_id,
             "match_status": p.match_status.value,
             "match_confidence": p.match_confidence,
@@ -223,6 +278,8 @@ class ParticipantRepository:
             designation=row["designation"] or "",
             certificate_type=row["certificate_type"] or "",
             remarks=row["remarks"] or "",
+            team_name=row["team_name"] if "team_name" in row.keys() and row["team_name"] else "",
+            is_team_leader=bool(row["is_team_leader"]) if "is_team_leader" in row.keys() and row["is_team_leader"] else False,
             certificate_id=row["certificate_id"] or 0,
             match_status=MatchStatus(row["match_status"]),
             match_confidence=row["match_confidence"] or 0.0,

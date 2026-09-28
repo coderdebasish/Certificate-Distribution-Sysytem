@@ -189,6 +189,14 @@ MIGRATIONS: list[tuple[int, str, str]] = [
         );
         """,
     ),
+    (
+        2,
+        "Add team_name and is_team_leader columns to participants",
+        """
+        ALTER TABLE participants ADD COLUMN team_name TEXT DEFAULT '';
+        ALTER TABLE participants ADD COLUMN is_team_leader INTEGER DEFAULT 0;
+        """,
+    ),
 ]
 
 
@@ -206,9 +214,15 @@ class MigrationManager:
             if version not in applied:
                 logger.info("Applying migration v%d: %s", version, description)
                 with self._db.transaction() as cur:
-                    cur.executescript(sql)
+                    try:
+                        cur.executescript(sql)
+                    except Exception as exc:
+                        if "duplicate column name" in str(exc).lower():
+                            logger.warning("Column already present during migration v%d: %s", version, exc)
+                        else:
+                            raise
                     cur.execute(
-                        "INSERT INTO schema_migrations (version, description) VALUES (?, ?)",
+                        "INSERT OR IGNORE INTO schema_migrations (version, description) VALUES (?, ?)",
                         (version, description),
                     )
                 logger.info("Migration v%d applied successfully.", version)
