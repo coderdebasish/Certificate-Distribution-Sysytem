@@ -24,20 +24,26 @@ from typing import Any
 # ---------------------------------------------------------------------------
 # Phrases that typically precede the participant name on a certificate
 # ---------------------------------------------------------------------------
-# Phrases that typically precede the participant name on a certificate
 NAME_KEYWORDS: list[str] = [
     "this certificate is proudly presented to",
     "this certificate is presented to",
+    "this certificate is awarded to",
+    "this certificate is hereby awarded to",
+    "this certificate is proudly awarded to",
     "is proudly presented to",
     "proudly presented to",
-    "this is to certify that",
-    "is hereby awarded to",
-    "is awarded to",
+    "is presented to",
     "presented to",
     "awarded to",
+    "this is to certify that",
+    "is hereby awarded to",
     "certify that",
-    "is presented to",
     "congratulations to",
+    "certificate of participation",
+    "certificate of appreciation",
+    "in recognition of",
+    "participant",
+    "recipient",
 ]
 
 # Words that indicate a descriptive sentence or header, NOT a person's name
@@ -102,13 +108,19 @@ EXCLUDE_HEADER_PHRASES: list[str] = [
     "convenor",
     "president",
     "head",
+    "certificate of",
+    "this certificate",
+    "certificate awarded",
+    "certificate presented",
 ]
 
 # Words that should NOT be treated as names
 REJECT_PATTERNS: list[str] = [
     r"^(mr|ms|mrs|dr|prof)\.?\s*$",
-    r"^\d+$",           # Pure numbers
-    r"^[-_/\\|]+$",     # Symbols only
+    r"^\d+$",
+    r"^[-_/\\|]+$",
+    r"^[a-z]+\s+(to|for|in|on|of|and|with|from)\s*$",
+    r"^(certificate|participation|appreciation|completion|achievement|award|winner|runner|up|recognition|event|workshop|seminar|conference|symposium|hackathon|ideathon|training|volunteer|organizing|committee)\s*$",
 ]
 
 
@@ -211,36 +223,54 @@ class NameDetector:
         )
 
     def _keyword_strategy(self, lines: list[str], event_name: str = "") -> NameDetectionResult | None:
-        text_lower = " ".join(lines).lower()
-        for keyword in NAME_KEYWORDS:
-            idx = text_lower.find(keyword)
-            if idx == -1:
-                continue
-            char_count = 0
-            keyword_line_idx = 0
-            for i, line in enumerate(lines):
-                char_count += len(line) + 1
-                if char_count >= idx:
-                    keyword_line_idx = i
-                    break
-            for candidate_line in lines[keyword_line_idx + 1: keyword_line_idx + 4]:
-                name = self._clean_name(candidate_line)
-                if name and self._is_valid_name(name, event_name=event_name):
-                    confidence = self._score_name(name, method="keyword")
+        for index, line in enumerate(lines):
+            lower_line = line.lower()
+            for keyword in NAME_KEYWORDS:
+                keyword_lower = keyword.lower()
+                if keyword_lower not in lower_line:
+                    continue
+
+                this_line_match = re.search(rf"{re.escape(keyword_lower)}\s*[:\-]?\s*([A-Z][A-Za-z'.,\- ]{{2,80}})", line, re.IGNORECASE)
+                if this_line_match:
+                    name = self._clean_name(this_line_match.group(1))
+                    if name and self._is_valid_name(name, event_name=event_name):
+                        return NameDetectionResult(
+                            detected_name=name,
+                            confidence=self._score_name(name, method="keyword"),
+                            method="keyword",
+                            raw_text_used=line,
+                        )
+
+                candidates: list[tuple[str, float]] = []
+                for offset in range(1, 8):
+                    target_index = index + offset
+                    if target_index >= len(lines):
+                        break
+                    candidate_line = lines[target_index]
+                    name = self._clean_name(candidate_line)
+                    if name and self._is_valid_name(name, event_name=event_name):
+                        score = self._score_name(name, method="keyword") + max(0.0, 8.0 - offset * 0.8)
+                        candidates.append((name, score))
+                if candidates:
+                    best_name, best_score = max(candidates, key=lambda item: item[1])
                     return NameDetectionResult(
-                        detected_name=name,
-                        confidence=confidence,
+                        detected_name=best_name,
+                        confidence=min(best_score, 99.0),
                         method="keyword",
-                        raw_text_used=candidate_line,
+                        raw_text_used=best_name,
                     )
         return None
 
     def _layout_strategy(self, lines: list[str], event_name: str = "") -> NameDetectionResult | None:
-        candidates = [
-            (line, len(line))
-            for line in lines
-            if self._is_valid_name(self._clean_name(line), event_name=event_name)
-        ]
+        candidates = []
+        for line in lines:
+            name = self._clean_name(line)
+            if not self._is_valid_name(name, event_name=event_name):
+                continue
+            word_count = len(name.split())
+            if word_count == 1:
+                continue
+            candidates.append((name, len(name)))
         if not candidates:
             return None
         candidates.sort(key=lambda x: x[1], reverse=True)
@@ -273,13 +303,15 @@ class NameDetector:
     def _clean_name(text: str) -> str:
         """Normalize whitespace and remove common title prefixes."""
         name = re.sub(r"\s+", " ", text).strip()
-        # Strip leading/trailing non-alphanumeric punctuation
+        name = name.replace("•", " ")
         name = re.sub(r"^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$", "", name).strip()
+        name = re.sub(r"\s*[:\-–—]\s*", " ", name)
+        name = re.sub(r"\s+", " ", name).strip()
         return name
 
     @staticmethod
     def _is_valid_name(name: str, event_name: str = "") -> bool:
-        if not name or len(name) < 3 or len(name) > 80:
+        if not name or len(name) < 2 or len(name) > 80:
             return False
         lower = name.lower()
         if any(ex in lower for ex in EXCLUDE_HEADER_PHRASES):
@@ -288,18 +320,25 @@ class NameDetector:
             for w in event_name.lower().split():
                 if len(w) > 3 and w in lower:
                     return False
+        if len(name.split()) > 6:
+            return False
         for pattern in REJECT_PATTERNS:
             if re.fullmatch(pattern, lower):
                 return False
-        # Must contain at least one letter
+        if lower.startswith(("certificate", "participation", "appreciation", "award", "recognition", "winner", "runner", "workshop", "seminar", "conference", "symposium", "hackathon", "ideathon")):
+            return False
+        if "certificate" in lower or "participation" in lower or "workshop" in lower or "seminar" in lower or "conference" in lower:
+            return False
         return bool(re.search(r"[a-zA-Z]", name))
 
     @staticmethod
     def _score_name(name: str, method: str) -> float:
-        base_score = 90.0 if method in ("font_size", "keyword") else 75.0
+        base_score = 92.0 if method in ("font_size", "keyword") else 75.0
         words = name.split()
-        if len(words) >= 2:
+        if 2 <= len(words) <= 4:
             base_score += 5.0
+        if len(words) == 1:
+            base_score -= 5.0
         if name.isupper() or name == name.title():
             base_score += 4.0
-        return min(base_score, 99.0)
+        return min(max(base_score, 0.0), 99.0)

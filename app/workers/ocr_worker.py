@@ -18,8 +18,7 @@ from typing import Callable, Optional
 
 import fitz  # PyMuPDF
 
-from app.services.ocr.base import OCREngine, OCRResult
-from app.services.ocr.paddle_ocr import PaddleOCREngine
+from app.services.ocr import OCREngine, OCRResult, get_best_ocr_engine
 from app.services.ocr.name_detector import NameDetector, NameDetectionResult
 from app.workers.base_worker import BaseWorker
 from app.workers.signals import Signal, SignalType
@@ -52,7 +51,7 @@ class OCRWorker(BaseWorker):
         self._db_conn = db_conn
         self._project_id = project_id
         self._ocr_threshold = ocr_threshold
-        self._ocr_engine = ocr_engine or PaddleOCREngine()
+        self._ocr_engine = ocr_engine or get_best_ocr_engine()
         self._name_detector = NameDetector()
         self._pdf_paths = pdf_paths
         self._event_name = event_name
